@@ -1,0 +1,12 @@
+{
+  "config": {
+    // Tables and code samples routinely exceed 80 columns.
+    "MD013": false,
+    // Duplicate headings are fine across sibling guides.
+    "MD024": { "siblings_only": true },
+    // Snippets are illustrative; a bare "```" block is intentional in places.
+    "MD040": false
+  },
+  "globs": ["**/*.md"],
+  "ignores": ["node_modules"]
+}
