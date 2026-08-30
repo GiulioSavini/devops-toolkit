@@ -21,16 +21,21 @@ Architectures and practical patterns for managing credentials, API tokens, and c
 ## 2. Encrypting Repositories with Mozilla SOPS & Age
 
 1. Generate Age keypair:
+
    ```bash
    age-keygen -o key.txt
    ```
+
 2. Configure `.sops.yaml`:
+
    ```yaml
    creation_rules:
      - path_regex: .*\.enc\.ya?ml$
        age: age1ql3...
    ```
+
 3. Encrypt and Decrypt:
+
    ```bash
    sops -e secrets.yaml > secrets.enc.yaml
    sops -d secrets.enc.yaml > secrets.yaml

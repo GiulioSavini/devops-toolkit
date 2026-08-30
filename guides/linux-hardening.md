@@ -7,6 +7,7 @@ Comprehensive production guide for hardening Ubuntu/Debian and RHEL/Rocky Linux 
 ## 1. System Updates & Minimal Packages
 
 - Keep the system updated automatically:
+
   ```bash
   # Ubuntu/Debian
   sudo apt update && sudo apt upgrade -y
@@ -50,6 +51,7 @@ kernel.dmesg_restrict = 1
 ```
 
 Apply with:
+
 ```bash
 sudo sysctl -p /etc/sysctl.d/99-security.conf
 ```

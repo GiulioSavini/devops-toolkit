@@ -17,7 +17,7 @@ report it:
   for anything already public (a wrong sysctl value, an outdated cipher list, a
   deprecated flag).
 - For anything you would rather not post publicly, email
-  **giuliosavini@proton.me**.
+  **<giuliosavini@proton.me>**.
 
 Please include the guide, the specific snippet, and why it is wrong. A pointer to
 upstream documentation or a CVE is the fastest path to a fix.
