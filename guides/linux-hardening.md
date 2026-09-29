@@ -518,7 +518,7 @@ cited: verify them against the exact benchmark version you are audited on.
 - [`auditctl(8)`](https://man7.org/linux/man-pages/man8/auditctl.8.html),
   [`audit.rules(7)`](https://man7.org/linux/man-pages/man7/audit.rules.7.html)
 - [`pam_faillock(8)`](https://man7.org/linux/man-pages/man8/pam_faillock.8.html),
-  [`pwquality.conf(5)`](https://man7.org/linux/man-pages/man5/pwquality.conf.5.html)
+  [`pwquality.conf(5)`](https://man.archlinux.org/man/pwquality.conf.5)
 - [NIST SP 800-63B, Digital Identity Guidelines](https://pages.nist.gov/800-63-3/sp800-63b.html)
   (password expiry, §5.1.1.2)
 - [CIS Benchmarks](https://www.cisecurity.org/cis-benchmarks) — the

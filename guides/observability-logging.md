@@ -502,7 +502,7 @@ cited: verify them against the exact benchmark version you are audited on.
   rules](https://prometheus.io/docs/prometheus/latest/configuration/unit_testing_rules/)
 - [Alertmanager configuration
   reference](https://prometheus.io/docs/alerting/latest/configuration/) and
-  [`amtool`](https://github.com/prometheus/alertmanager/blob/main/docs/cli/amtool.md)
+  [`amtool`](https://github.com/prometheus/alertmanager#amtool)
 - [OpenTelemetry Collector configuration and the `memory_limiter`
   processor](https://opentelemetry.io/docs/collector/configuration/)
 - [Linux hardening — Audit trail](linux-hardening.md#audit-trail) and

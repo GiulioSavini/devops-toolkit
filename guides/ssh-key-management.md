@@ -374,7 +374,10 @@ ssh -o IdentitiesOnly=yes -i ~/.ssh/id_ed25519_sk host true
   FIDO2 options
 - [`sshd_config(5)`](https://man.openbsd.org/sshd_config),
   [`ssh_config(5)`](https://man.openbsd.org/ssh_config)
-- [OpenSSH certificate format specification](https://cvsweb.openbsd.org/src/usr.bin/ssh/PROTOCOL.certkeys)
+- [`ssh-keygen(1)`, CERTIFICATES section](https://man.openbsd.org/ssh-keygen#CERTIFICATES)
+  and the [KRL wire format](https://github.com/openssh/openssh-portable/blob/master/PROTOCOL.krl)
+  (`PROTOCOL.certkeys` no longer exists upstream; the format is documented in the
+  manual page)
 - [OpenSSH release notes](https://www.openssh.com/releasenotes.html) — when each
   option appeared, and what was removed
 - [`ssh-agent(1)`](https://man.openbsd.org/ssh-agent) on `-c` confirmation and
