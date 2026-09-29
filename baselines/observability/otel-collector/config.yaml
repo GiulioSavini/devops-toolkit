@@ -1,0 +1,157 @@
+# OpenTelemetry Collector: the single egress point for traces, metrics and
+# logs leaving a host or cluster. Everything upstream of this file (SDKs,
+# exporters embedded in applications) is untrusted input; everything
+# downstream is your actual observability backend. Validate with
+# `otelcol validate --config`, see tests/observability.sh.
+#
+# Read this file top to bottom, but know that reading order is not activation
+# order: a receiver, processor or exporter defined above is INERT until its
+# name also appears in a pipeline under `service.pipelines` at the bottom.
+# Nothing checks that for you at a glance — the collector will start, log
+# nothing alarming, and quietly not use it. Renaming a processor (fixing a
+# typo in `attributes/redact`, say) without updating every pipeline that
+# lists it is the same trap in reverse: the OLD name silently drops out of
+# the pipeline it used to run in. `tests/observability.sh` case (d) documents
+# which half of this trap `otelcol validate` actually catches empirically —
+# do not assume it catches both.
+
+receivers:
+  # Application SDKs and instrumentation agents push here. This is the
+  # collector's only ingest path in this file — no Jaeger/Zipkin legacy
+  # receivers, so there is one wire format to secure and one to reason about.
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # The collector's own health and throughput numbers, scraped back into the
+  # same pipeline as everything else. Without this, "is the collector
+  # keeping up" is a question you can only answer by noticing gaps in the
+  # data it was supposed to forward.
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: otelcol-self
+          scrape_interval: 30s
+          static_configs:
+            - targets: ["0.0.0.0:8888"]
+
+processors:
+  # This is the processor that stops the observability pipeline from
+  # becoming an incident of its own. Every processor after this one buffers
+  # data in memory; a burst of traces from a retry storm, or a client that
+  # starts emitting ten times its normal volume, grows that buffer without
+  # limit. A collector with no memory_limiter does not "run out of memory
+  # gracefully" — it gets OOM-killed by the kernel, and on a node also
+  # running the workload it monitors, that is the collector taking the node
+  # down with it, at the exact moment (an incident) when you need it most.
+  # `limit_mib` must be comfortably under the container/pod memory limit,
+  # not equal to it: the Go runtime's own overhead and GC headroom live
+  # above this number.
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+
+  # PII and secrets do not stop at the log pipeline — they arrive as span
+  # and log attributes too: an Authorization header captured by HTTP
+  # instrumentation, a raw SQL statement with bind values inlined, a customer
+  # identifier an SDK default attaches to every span. Once an attribute
+  # leaves this collector it is in the backend's storage, its backups, and
+  # anyone with read access to the backend. Deleting here is the only point
+  # with full context (the raw attribute name) to do it reliably; a
+  # downstream processor sees whatever survived and cannot tell what it
+  # already lost. See "Secrets and PII in telemetry" in
+  # guides/observability-logging.md.
+  attributes/redact:
+    actions:
+      # Full authorization headers and generic auth attributes: the literal
+      # credential, not a description of one.
+      - key: http.request.header.authorization
+        action: delete
+      - key: authorization
+        action: delete
+      # Raw SQL with parameters inlined can carry card numbers, emails,
+      # anything the query touched.
+      - key: db.statement
+        action: delete
+      # enduser.id is kept, not deleted: correlating "which user hit this
+      # error" is a real, common query. Hashing instead of deleting keeps
+      # that correlation (the same input always hashes the same) without
+      # storing the raw identifier, and it caps the cardinality cost to one
+      # fixed-width value instead of an unbounded one — see "Cardinality"
+      # in guides/observability-logging.md for why an unhashed user or
+      # request ID as a label is the thing that kills Prometheus.
+      - key: enduser.id
+        action: hash
+
+  # Batches before export. Deliberately placed AFTER memory_limiter (so a
+  # memory-pressure drop happens before spending CPU batching data that is
+  # about to be discarded) and LAST among processors (so nothing downstream
+  # of batching sees smaller, more numerous batches than exporters need).
+  # send_batch_size is a floor, not a cap: a batch is emitted early once
+  # `timeout` elapses even if it never reaches this size, which bounds
+  # worst-case latency for low-traffic pipelines.
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+    send_batch_max_size: 2048
+
+extensions:
+  # Kubernetes/Docker liveness and readiness probes hit this. Without it, an
+  # orchestrator cannot tell a wedged collector from a healthy quiet one, and
+  # will not restart the former.
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+exporters:
+  # Traces and logs leave over OTLP/HTTP to the next hop (a gateway
+  # collector, or the backend directly). TLS is not optional here: this is
+  # the same telemetry the attributes/redact processor just spent effort
+  # scrubbing, so shipping it in cleartext undoes that work at the network
+  # layer instead of the attribute layer.
+  otlphttp:
+    endpoint: https://otel-gateway.internal:4318
+    tls:
+      ca_file: /etc/otelcol/certs/ca.pem
+
+  # Metrics go to Prometheus' remote-write endpoint rather than being
+  # scraped, because this collector is itself an aggregation point for many
+  # short-lived sources (see the OTLP receiver above) that a pull model
+  # cannot reach individually.
+  prometheusremotewrite:
+    endpoint: https://prometheus.internal/api/v1/write
+    tls:
+      ca_file: /etc/otelcol/certs/ca.pem
+
+  # Local visibility into what the collector is actually exporting, at
+  # startup and during incident debugging. `verbosity: basic` is
+  # deliberate: `detailed` prints full record bodies to the collector's own
+  # log, which is exactly the kind of raw-attribute leak attributes/redact
+  # exists to prevent — turn it up only on a throwaway instance, never in
+  # place.
+  debug:
+    verbosity: basic
+
+# The only section that turns the components above into something that
+# runs. A receiver, processor or exporter not named in a pipeline here is
+# parsed successfully, accepted by `otelcol validate`, and never executed —
+# see the header comment and tests/observability.sh case (d) for exactly
+# what validation does and does not catch about that.
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, attributes/redact, batch]
+      exporters: [otlphttp]
+    metrics:
+      receivers: [otlp, prometheus]
+      processors: [memory_limiter, batch]
+      exporters: [prometheusremotewrite, debug]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, attributes/redact, batch]
+      exporters: [otlphttp]
