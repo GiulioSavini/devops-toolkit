@@ -1,0 +1,32 @@
+<!--
+  Custom decoders. Install as /var/ossec/etc/decoders/local_decoder.xml on the
+  MANAGER (decoding happens on the manager, not on the agent — an agent only
+  ships the log line).
+
+  Order matters: a parent decoder matches the program name, children extract
+  fields from what is left. A child whose <prematch> never matches produces no
+  fields and therefore no rule match, silently — which is why
+  tests/wazuh.sh feeds real log lines through wazuh-logtest-legacy and asserts
+  the extracted fields, not just that a rule id appeared.
+
+  Field names are not free-form: srcip, dstuser, srcuser, url, status and the
+  rest are the names rules, the API and the dashboards filter on. Inventing
+  `source_ip` gives you a field nothing else can query.
+-->
+<decoder name="exampleapp">
+  <program_name>exampleapp</program_name>
+</decoder>
+
+<decoder name="exampleapp-auth">
+  <parent>exampleapp</parent>
+  <prematch>^ACTION=login </prematch>
+  <regex offset="after_prematch">^RESULT=(\S+) USER=(\S+) SRCIP=(\S+)</regex>
+  <order>status, srcuser, srcip</order>
+</decoder>
+
+<decoder name="exampleapp-privilege">
+  <parent>exampleapp</parent>
+  <prematch>^ACTION=grant </prematch>
+  <regex offset="after_prematch">^ROLE=(\S+) USER=(\S+) BY=(\S+)</regex>
+  <order>extra_data, dstuser, srcuser</order>
+</decoder>
