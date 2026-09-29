@@ -1,0 +1,22 @@
+---
+# Exact versions, never a range and never omitted. `ansible-galaxy install -r`
+# with an unpinned collection resolves to whatever is newest on Galaxy at that
+# moment, which makes a pipeline that passed yesterday fail today for reasons
+# that are not in the diff. Pinning also means the execution environment built
+# from this file (execution-environment.yml) is reproducible.
+#
+# Bump deliberately: read the collection changelog, run `bash tests/ansible.sh`,
+# then commit the new pin.
+collections:
+  - name: ansible.posix
+    version: "2.2.2"
+  - name: ansible.utils
+    version: "6.1.1"
+  - name: community.general
+    version: "13.4.0"
+  - name: community.crypto
+    version: "3.4.0"
+  # Decrypts group_vars/*.sops.yml through the vars plugin enabled in
+  # ansible.cfg, so secrets never land in the working tree as plaintext.
+  - name: community.sops
+    version: "2.4.0"

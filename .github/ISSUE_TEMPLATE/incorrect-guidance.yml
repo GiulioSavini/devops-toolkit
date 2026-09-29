@@ -1,0 +1,25 @@
+name: Incorrect or outdated guidance
+description: A snippet or baseline file is wrong, insecure, or no longer matches upstream.
+labels: ["correction"]
+body:
+  - type: input
+    id: location
+    attributes:
+      label: File and section
+      placeholder: guides/linux-hardening.md, "Baseline" / baselines/linux/sysctl/99-hardening.conf
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is wrong
+      description: What the guide says, what actually happens, and on which version.
+    validations:
+      required: true
+  - type: textarea
+    id: source
+    attributes:
+      label: Source
+      description: Upstream docs, man page, changelog or CVE that shows the correct behaviour.
+    validations:
+      required: true

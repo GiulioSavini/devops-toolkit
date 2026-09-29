@@ -1,0 +1,52 @@
+### Example of calling the reusable workflow from an application repo.
+### Place at .github/workflows/security.yml in the *calling* repo. `uses:` with
+### a local path resolves the reusable workflow from the calling repo's own ref,
+### so either vendor baselines/cicd/security.yml in-repo (what this example
+### does) or reference it as `owner/repo/.github/workflows/security.yml@<sha>`
+### — pinned to a SHA, like every other third-party code you execute.
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    # `pull_request` is the safe trigger for untrusted contributions: the job
+    # gets a read-only, fork-scoped GITHUB_TOKEN and no access to repository
+    # secrets, and it checks out the merge ref.
+    #
+    # `pull_request_target` is the trap. It runs the *base* branch's workflow
+    # file — so a malicious PR cannot edit the pipeline — but it runs with a
+    # write-capable token and full access to secrets, and a single
+    # `actions/checkout` with `ref: ${{ github.event.pull_request.head.sha }}`
+    # then executes the fork's code with all of it in reach. Every build step,
+    # every `npm install` lifecycle script, every Makefile is then a
+    # secrets-exfiltration primitive.
+    #
+    # If you genuinely need write access on a fork PR (labelling, posting a
+    # review comment), put *only* that in a separate `pull_request_target`
+    # workflow that never checks out or executes PR code, and keep the build
+    # and scan jobs on `pull_request`.
+
+# The caller denies by default too: a token the reusable workflow's jobs never
+# receive cannot be misused by them.
+permissions: {}
+
+concurrency:
+  # Cancel superseded runs on the same ref, but never cancel a main-branch run
+  # half-way through pushing a signature.
+  group: security-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  security:
+    uses: ./.github/workflows/security.yml
+    with:
+      # Set to a pushed image *digest* to enable the SBOM and signing jobs,
+      # e.g. needs.build.outputs.image-digest from a preceding build job.
+      image-ref: ""
+    secrets:
+      # Pass exactly the secrets the callee declares. `secrets: inherit` is
+      # shorter and hands the reusable workflow every secret in the repo,
+      # including ones it has no business seeing.
+      SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}

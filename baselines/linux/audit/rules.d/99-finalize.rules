@@ -1,0 +1,6 @@
+## Install as /etc/audit/rules.d/99-finalize.rules - LAST, after a soak period.
+## Makes the loaded rules immutable until reboot: an attacker with root can no
+## longer silently remove them, but neither can you. Every rule change after
+## this needs a reboot, and `augenrules --load` fails with "Operation not
+## permitted" until then.
+-e 2

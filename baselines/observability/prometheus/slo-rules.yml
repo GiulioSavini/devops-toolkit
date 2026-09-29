@@ -1,0 +1,119 @@
+# Recording rules for availability SLOs. Load with:
+#   rule_files:
+#     - /etc/prometheus/rules/slo-rules.yml
+#     - /etc/prometheus/rules/slo-alerts.yml
+# Validate with `promtool check rules` and unit-test with `promtool test rules`
+# (see baselines/observability/prometheus/slo-alerts_test.yml).
+#
+# Two reasons these ratios are recording rules rather than inline alert
+# expressions:
+#   1. The multi-window burn-rate alerts evaluate the same ratio over six
+#      windows. Inline, that is six copies of the same expression to keep in
+#      sync; the first time somebody fixes the status-code matcher in four of
+#      them, the alerts disagree about what an error is.
+#   2. A 3d rate over a high-cardinality metric is expensive. Recorded once
+#      per evaluation interval, the alert reads a single series.
+#
+# The SLI is request-based ("what fraction of requests failed"), which is what
+# the burn-rate arithmetic below assumes. A window-based SLI (fraction of
+# minutes that were bad) needs different thresholds.
+
+groups:
+  # ---------------------------------------------------------------------------
+  # The SLO target lives in exactly one place. Everything downstream reads it
+  # with `on(job) group_left()`, so raising checkout from 99.9% to 99.95% is a
+  # one-line change instead of eight threshold edits across the alert file.
+  # ---------------------------------------------------------------------------
+  - name: slo_targets
+    interval: 1m
+    rules:
+      # Allowed failure ratio = 1 - SLO. 0.001 == 99.9% over the compliance
+      # window declared in the annotation below.
+      - record: slo:error_budget_ratio:target
+        expr: vector(0.001)
+        labels:
+          job: checkout
+          slo_window: 30d
+
+      - record: slo:error_budget_ratio:target
+        expr: vector(0.005)
+        labels:
+          job: search
+          slo_window: 30d
+
+  # ---------------------------------------------------------------------------
+  # One ratio per burn-rate window. The windows come in pairs — a long window
+  # that decides whether the burn is real, and a short window (roughly 1/12 of
+  # it) that decides whether it is still happening.
+  # ---------------------------------------------------------------------------
+  - name: slo_error_ratios
+    interval: 1m
+    rules:
+      # sum without() the status label, then divide: the numerator and
+      # denominator are computed from the same counter over the same window, so
+      # a counter reset or a scrape gap cancels out instead of producing a
+      # ratio above 1.
+      - record: job:slo_errors_per_request:ratio_rate5m
+        expr: |
+          sum by (job) (rate(http_requests_total{status=~"5.."}[5m]))
+            /
+          sum by (job) (rate(http_requests_total[5m]))
+
+      - record: job:slo_errors_per_request:ratio_rate30m
+        expr: |
+          sum by (job) (rate(http_requests_total{status=~"5.."}[30m]))
+            /
+          sum by (job) (rate(http_requests_total[30m]))
+
+      - record: job:slo_errors_per_request:ratio_rate1h
+        expr: |
+          sum by (job) (rate(http_requests_total{status=~"5.."}[1h]))
+            /
+          sum by (job) (rate(http_requests_total[1h]))
+
+      - record: job:slo_errors_per_request:ratio_rate2h
+        expr: |
+          sum by (job) (rate(http_requests_total{status=~"5.."}[2h]))
+            /
+          sum by (job) (rate(http_requests_total[2h]))
+
+      - record: job:slo_errors_per_request:ratio_rate6h
+        expr: |
+          sum by (job) (rate(http_requests_total{status=~"5.."}[6h]))
+            /
+          sum by (job) (rate(http_requests_total[6h]))
+
+      - record: job:slo_errors_per_request:ratio_rate1d
+        expr: |
+          sum by (job) (rate(http_requests_total{status=~"5.."}[1d]))
+            /
+          sum by (job) (rate(http_requests_total[1d]))
+
+      - record: job:slo_errors_per_request:ratio_rate3d
+        expr: |
+          sum by (job) (rate(http_requests_total{status=~"5.."}[3d]))
+            /
+          sum by (job) (rate(http_requests_total[3d]))
+
+  # ---------------------------------------------------------------------------
+  # Budget left, for dashboards and for the "should we ship?" conversation.
+  # Not for alerting: a budget-remaining threshold pages late on a fast burn
+  # and pages forever after a single bad afternoon.
+  # ---------------------------------------------------------------------------
+  - name: slo_budget_remaining
+    interval: 1m
+    rules:
+      # Deliberately an approximation: averaging the 5m ratio over 30d weights
+      # every sample equally, so a quiet Sunday night counts as much as Monday
+      # lunchtime. The exact figure needs a traffic-weighted ratio over 30d
+      # (increase(...[30d]) on both counters), which is a range query no
+      # alerting path should be running every minute. Use this for the
+      # dashboard; recompute the exact number when the answer decides a
+      # release.
+      - record: job:slo_error_budget_remaining:ratio30d
+        expr: |
+          1 - (
+            avg_over_time(job:slo_errors_per_request:ratio_rate5m[30d])
+              / on(job) group_left()
+            slo:error_budget_ratio:target
+          )

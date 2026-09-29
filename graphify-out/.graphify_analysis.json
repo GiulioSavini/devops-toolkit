@@ -1,0 +1,389 @@
+{
+  "communities": {
+    "0": [
+      "baselines_iam_terraform_aws_github_oidc_main",
+      "baselines_iam_terraform_aws_github_oidc_outputs",
+      "baselines_iam_terraform_aws_github_oidc_variables",
+      "baselines_iam_terraform_aws_github_oidc_versions",
+      "terraform_baselines_iam_terraform_aws_github_oidc_3fe8840dd2ab9597_aws_iam_openid_connect_provider_github",
+      "terraform_baselines_iam_terraform_aws_github_oidc_3fe8840dd2ab9597_aws_iam_role_github",
+      "terraform_baselines_iam_terraform_aws_github_oidc_3fe8840dd2ab9597_aws_iam_role_policy_attachment_github",
+      "terraform_baselines_iam_terraform_aws_github_oidc_3fe8840dd2ab9597_data_aws_iam_openid_connect_provider_github",
+      "terraform_baselines_iam_terraform_aws_github_oidc_3fe8840dd2ab9597_directory",
+      "terraform_baselines_iam_terraform_aws_github_oidc_3fe8840dd2ab9597_local_issuer_host",
+      "terraform_baselines_iam_terraform_aws_github_oidc_3fe8840dd2ab9597_local_oidc_provider_arn",
+      "terraform_baselines_iam_terraform_aws_github_oidc_3fe8840dd2ab9597_local_trust_policy",
+      "terraform_baselines_iam_terraform_aws_github_oidc_3fe8840dd2ab9597_output_role_arn",
+      "terraform_baselines_iam_terraform_aws_github_oidc_3fe8840dd2ab9597_output_trust_policy_json",
+      "terraform_baselines_iam_terraform_aws_github_oidc_3fe8840dd2ab9597_var_allowed_subjects",
+      "terraform_baselines_iam_terraform_aws_github_oidc_3fe8840dd2ab9597_var_create_oidc_provider",
+      "terraform_baselines_iam_terraform_aws_github_oidc_3fe8840dd2ab9597_var_max_session_duration",
+      "terraform_baselines_iam_terraform_aws_github_oidc_3fe8840dd2ab9597_var_permissions_boundary_arn",
+      "terraform_baselines_iam_terraform_aws_github_oidc_3fe8840dd2ab9597_var_policy_arns",
+      "terraform_baselines_iam_terraform_aws_github_oidc_3fe8840dd2ab9597_var_role_name",
+      "terraform_baselines_iam_terraform_aws_github_oidc_3fe8840dd2ab9597_var_tags"
+    ],
+    "1": [
+      "baselines_iam_terraform_azure_github_oidc_main",
+      "baselines_iam_terraform_azure_github_oidc_outputs",
+      "baselines_iam_terraform_azure_github_oidc_providers",
+      "baselines_iam_terraform_azure_github_oidc_variables",
+      "baselines_iam_terraform_azure_github_oidc_versions",
+      "terraform_baselines_iam_terraform_azure_github_oidc_48b082b2da799e0e_azurerm_federated_identity_credential_github",
+      "terraform_baselines_iam_terraform_azure_github_oidc_48b082b2da799e0e_azurerm_role_assignment_github",
+      "terraform_baselines_iam_terraform_azure_github_oidc_48b082b2da799e0e_azurerm_user_assigned_identity_github",
+      "terraform_baselines_iam_terraform_azure_github_oidc_48b082b2da799e0e_directory",
+      "terraform_baselines_iam_terraform_azure_github_oidc_48b082b2da799e0e_local_entra_audience",
+      "terraform_baselines_iam_terraform_azure_github_oidc_48b082b2da799e0e_local_github_issuer",
+      "terraform_baselines_iam_terraform_azure_github_oidc_48b082b2da799e0e_output_client_id",
+      "terraform_baselines_iam_terraform_azure_github_oidc_48b082b2da799e0e_output_principal_id",
+      "terraform_baselines_iam_terraform_azure_github_oidc_48b082b2da799e0e_provider_azurerm",
+      "terraform_baselines_iam_terraform_azure_github_oidc_48b082b2da799e0e_var_location",
+      "terraform_baselines_iam_terraform_azure_github_oidc_48b082b2da799e0e_var_name",
+      "terraform_baselines_iam_terraform_azure_github_oidc_48b082b2da799e0e_var_resource_group_name",
+      "terraform_baselines_iam_terraform_azure_github_oidc_48b082b2da799e0e_var_role_assignments",
+      "terraform_baselines_iam_terraform_azure_github_oidc_48b082b2da799e0e_var_subjects",
+      "terraform_baselines_iam_terraform_azure_github_oidc_48b082b2da799e0e_var_tags"
+    ],
+    "2": [
+      "baselines_docker_example_app_main",
+      "baselines_docker_example_app_main_caps",
+      "baselines_docker_example_app_main_fail",
+      "baselines_docker_example_app_main_main",
+      "baselines_docker_example_app_main_plain",
+      "baselines_docker_example_app_main_probewrite",
+      "baselines_docker_example_app_main_rootfsprobedir",
+      "go_pkg_context",
+      "go_pkg_errors",
+      "go_pkg_fmt",
+      "go_pkg_log",
+      "go_pkg_net_http",
+      "go_pkg_os",
+      "go_pkg_os_signal",
+      "go_pkg_path_filepath",
+      "go_pkg_strings",
+      "go_pkg_syscall",
+      "go_pkg_time",
+      "go_type_net_http_responsewriter"
+    ],
+    "3": [
+      "baselines_iam_terraform_gcp_github_wif_main",
+      "baselines_iam_terraform_gcp_github_wif_outputs",
+      "baselines_iam_terraform_gcp_github_wif_variables",
+      "baselines_iam_terraform_gcp_github_wif_versions",
+      "terraform_baselines_iam_terraform_gcp_github_wif_8cb80fb47ac50931_directory",
+      "terraform_baselines_iam_terraform_gcp_github_wif_8cb80fb47ac50931_google_iam_workload_identity_pool_github",
+      "terraform_baselines_iam_terraform_gcp_github_wif_8cb80fb47ac50931_google_iam_workload_identity_pool_provider_github",
+      "terraform_baselines_iam_terraform_gcp_github_wif_8cb80fb47ac50931_google_service_account_github",
+      "terraform_baselines_iam_terraform_gcp_github_wif_8cb80fb47ac50931_google_service_account_iam_member_github",
+      "terraform_baselines_iam_terraform_gcp_github_wif_8cb80fb47ac50931_output_service_account_email",
+      "terraform_baselines_iam_terraform_gcp_github_wif_8cb80fb47ac50931_output_workload_identity_provider",
+      "terraform_baselines_iam_terraform_gcp_github_wif_8cb80fb47ac50931_var_github_owner_id",
+      "terraform_baselines_iam_terraform_gcp_github_wif_8cb80fb47ac50931_var_pool_id",
+      "terraform_baselines_iam_terraform_gcp_github_wif_8cb80fb47ac50931_var_project_id",
+      "terraform_baselines_iam_terraform_gcp_github_wif_8cb80fb47ac50931_var_project_number",
+      "terraform_baselines_iam_terraform_gcp_github_wif_8cb80fb47ac50931_var_service_account_id",
+      "terraform_baselines_iam_terraform_gcp_github_wif_8cb80fb47ac50931_var_subjects"
+    ],
+    "4": [
+      "baselines_iam_terraform_aws_access_analyzer_unused_main",
+      "baselines_iam_terraform_aws_access_analyzer_unused_outputs",
+      "baselines_iam_terraform_aws_access_analyzer_unused_variables",
+      "baselines_iam_terraform_aws_access_analyzer_unused_versions",
+      "terraform_baselines_iam_terraform_aws_access_analyzer_unused_80cb8b5c0f6b20f0_aws_accessanalyzer_analyzer_unused",
+      "terraform_baselines_iam_terraform_aws_access_analyzer_unused_80cb8b5c0f6b20f0_directory",
+      "terraform_baselines_iam_terraform_aws_access_analyzer_unused_80cb8b5c0f6b20f0_local_analyzer_type",
+      "terraform_baselines_iam_terraform_aws_access_analyzer_unused_80cb8b5c0f6b20f0_local_has_exclusions",
+      "terraform_baselines_iam_terraform_aws_access_analyzer_unused_80cb8b5c0f6b20f0_output_analyzer_arn",
+      "terraform_baselines_iam_terraform_aws_access_analyzer_unused_80cb8b5c0f6b20f0_output_analyzer_type",
+      "terraform_baselines_iam_terraform_aws_access_analyzer_unused_80cb8b5c0f6b20f0_var_analyzer_name",
+      "terraform_baselines_iam_terraform_aws_access_analyzer_unused_80cb8b5c0f6b20f0_var_excluded_account_ids",
+      "terraform_baselines_iam_terraform_aws_access_analyzer_unused_80cb8b5c0f6b20f0_var_excluded_resource_tags",
+      "terraform_baselines_iam_terraform_aws_access_analyzer_unused_80cb8b5c0f6b20f0_var_scope",
+      "terraform_baselines_iam_terraform_aws_access_analyzer_unused_80cb8b5c0f6b20f0_var_tags",
+      "terraform_baselines_iam_terraform_aws_access_analyzer_unused_80cb8b5c0f6b20f0_var_unused_access_age"
+    ],
+    "5": [
+      "baselines_linux_bin_ssh_rollout_guard",
+      "baselines_linux_bin_ssh_rollout_guard_check_operator",
+      "baselines_linux_bin_ssh_rollout_guard_cmd_commit",
+      "baselines_linux_bin_ssh_rollout_guard_cmd_revert",
+      "baselines_linux_bin_ssh_rollout_guard_cmd_stage",
+      "baselines_linux_bin_ssh_rollout_guard_cmd_status",
+      "baselines_linux_bin_ssh_rollout_guard_die",
+      "baselines_linux_bin_ssh_rollout_guard_info",
+      "baselines_linux_bin_ssh_rollout_guard_restore_from",
+      "baselines_linux_bin_ssh_rollout_guard_sh__entry",
+      "baselines_linux_bin_ssh_rollout_guard_sshd_unit",
+      "baselines_linux_bin_ssh_rollout_guard_validate"
+    ],
+    "6": [
+      "baselines_terraform_example_modules_app_main",
+      "baselines_terraform_example_modules_app_outputs",
+      "baselines_terraform_example_modules_app_variables",
+      "baselines_terraform_example_modules_app_versions",
+      "terraform_baselines_terraform_example_modules_app_8bcbf33a1ca23af8_aws_s3_bucket_public_access_block_this",
+      "terraform_baselines_terraform_example_modules_app_8bcbf33a1ca23af8_aws_s3_bucket_server_side_encryption_configuration_this",
+      "terraform_baselines_terraform_example_modules_app_8bcbf33a1ca23af8_aws_s3_bucket_this",
+      "terraform_baselines_terraform_example_modules_app_8bcbf33a1ca23af8_aws_s3_bucket_versioning_this",
+      "terraform_baselines_terraform_example_modules_app_8bcbf33a1ca23af8_directory",
+      "terraform_baselines_terraform_example_modules_app_8bcbf33a1ca23af8_output_bucket_arn",
+      "terraform_baselines_terraform_example_modules_app_8bcbf33a1ca23af8_var_bucket_name",
+      "terraform_baselines_terraform_example_modules_app_8bcbf33a1ca23af8_var_tags"
+    ],
+    "7": [
+      "baselines_terraform_example_root_backend",
+      "baselines_terraform_example_root_main",
+      "baselines_terraform_example_root_providers",
+      "baselines_terraform_example_root_variables",
+      "baselines_terraform_example_root_versions",
+      "terraform_baselines_terraform_example_root_262867229bbe97c9_directory",
+      "terraform_baselines_terraform_example_root_262867229bbe97c9_module_app",
+      "terraform_baselines_terraform_example_root_262867229bbe97c9_provider_aws",
+      "terraform_baselines_terraform_example_root_262867229bbe97c9_var_aws_region",
+      "terraform_baselines_terraform_example_root_262867229bbe97c9_var_bucket_name"
+    ],
+    "8": [
+      "tests_ansible",
+      "tests_ansible_ansible_sh",
+      "tests_ansible_cleanup",
+      "tests_ansible_die",
+      "tests_ansible_groupcheck",
+      "tests_ansible_lint",
+      "tests_ansible_ok",
+      "tests_ansible_reset_tree",
+      "tests_ansible_sh__entry",
+      "tests_ansible_step"
+    ],
+    "9": [
+      "tests_cicd",
+      "tests_cicd_cleanup",
+      "tests_cicd_fail",
+      "tests_cicd_pass",
+      "tests_cicd_run_actionlint",
+      "tests_cicd_run_glci",
+      "tests_cicd_run_precommit_validate",
+      "tests_cicd_sh__entry"
+    ],
+    "10": [
+      "tests_docker",
+      "tests_docker_assert_eq",
+      "tests_docker_assert_ne",
+      "tests_docker_cleanup",
+      "tests_docker_fail",
+      "tests_docker_probe",
+      "tests_docker_sh__entry",
+      "tests_docker_start_app"
+    ],
+    "11": [
+      "tests_iam",
+      "tests_iam_pull_images",
+      "tests_iam_require_docker",
+      "tests_iam_sh__entry",
+      "tests_iam_step"
+    ],
+    "12": [
+      "baselines_incident_response_bin_ir_collect",
+      "baselines_incident_response_bin_ir_collect_die",
+      "baselines_incident_response_bin_ir_collect_record",
+      "baselines_incident_response_bin_ir_collect_sh__entry"
+    ],
+    "13": [
+      "baselines_iam_bin_aws_stale_credentials",
+      "baselines_iam_bin_aws_stale_credentials_fetch_report",
+      "baselines_iam_bin_aws_stale_credentials_sh__entry"
+    ],
+    "14": [
+      "tests_kubernetes",
+      "tests_kubernetes_sh__entry",
+      "tests_kubernetes_yq"
+    ],
+    "15": [
+      "baselines_terraform_backends_aws_s3_backend",
+      "terraform_baselines_terraform_backends_aws_s3_2e1762cf788ee3f3_directory"
+    ],
+    "16": [
+      "baselines_terraform_backends_azure_blob_backend",
+      "terraform_baselines_terraform_backends_azure_blob_fa05f51ce9e41fd6_directory"
+    ],
+    "17": [
+      "baselines_terraform_backends_gcp_gcs_backend",
+      "terraform_baselines_terraform_backends_gcp_gcs_345200d79bdf467f_directory"
+    ],
+    "18": [
+      "baselines_terraform_backends_opentofu_encrypted_backend",
+      "terraform_baselines_terraform_backends_opentofu_encrypted_d8157ab89bf533dc_directory"
+    ],
+    "19": [
+      "baselines_terraform_example_root_terraform_lock",
+      "terraform_baselines_terraform_example_root_262867229bbe97c9_provider_registry_terraform_io_hashicorp_aws"
+    ],
+    "20": [
+      "baselines_iam_terraform_aws_access_analyzer_unused_tests_unused_access_tftest"
+    ],
+    "21": [
+      "baselines_iam_terraform_aws_github_oidc_tests_trust_policy_tftest"
+    ],
+    "22": [
+      "baselines_iam_terraform_azure_github_oidc_tests_federation_tftest"
+    ],
+    "23": [
+      "baselines_iam_terraform_gcp_github_wif_tests_wif_tftest"
+    ],
+    "24": [
+      "baselines_secrets_fixtures_clean_config"
+    ],
+    "25": [
+      "baselines_secrets_fixtures_dirty_config"
+    ],
+    "26": [
+      "baselines_terraform_tflint"
+    ],
+    "27": [
+      "pkg_example_app"
+    ]
+  },
+  "cohesion": {
+    "0": 0.19047619047619047,
+    "1": 0.1631578947368421,
+    "2": 0.14619883040935672,
+    "3": 0.22794117647058823,
+    "4": 0.225,
+    "5": 0.48484848484848486,
+    "6": 0.25757575757575757,
+    "7": 0.24444444444444444,
+    "8": 0.4222222222222222,
+    "9": 0.42857142857142855,
+    "10": 0.5714285714285714,
+    "11": 0.7,
+    "12": 0.8333333333333334,
+    "13": 1.0,
+    "14": 1.0,
+    "15": 1.0,
+    "16": 1.0,
+    "17": 1.0,
+    "18": 1.0,
+    "19": 1.0,
+    "20": 1.0,
+    "21": 1.0,
+    "22": 1.0,
+    "23": 1.0,
+    "24": 1.0,
+    "25": 1.0,
+    "26": 1.0,
+    "27": 1.0
+  },
+  "gods": [
+    {
+      "id": "terraform_baselines_iam_terraform_aws_access_analyzer_unused_80cb8b5c0f6b20f0_aws_accessanalyzer_analyzer_unused",
+      "label": "aws_accessanalyzer_analyzer.unused",
+      "degree": 10
+    },
+    {
+      "id": "terraform_baselines_iam_terraform_azure_github_oidc_48b082b2da799e0e_azurerm_user_assigned_identity_github",
+      "label": "azurerm_user_assigned_identity.github",
+      "degree": 9
+    },
+    {
+      "id": "baselines_linux_bin_ssh_rollout_guard_cmd_stage",
+      "label": "cmd_stage()",
+      "degree": 9
+    },
+    {
+      "id": "terraform_baselines_iam_terraform_aws_github_oidc_3fe8840dd2ab9597_aws_iam_role_github",
+      "label": "aws_iam_role.github",
+      "degree": 8
+    },
+    {
+      "id": "baselines_linux_bin_ssh_rollout_guard_cmd_revert",
+      "label": "cmd_revert()",
+      "degree": 8
+    },
+    {
+      "id": "tests_ansible_sh__entry",
+      "label": "ansible.sh script",
+      "degree": 8
+    },
+    {
+      "id": "baselines_linux_bin_ssh_rollout_guard_die",
+      "label": "die()",
+      "degree": 7
+    },
+    {
+      "id": "terraform_baselines_terraform_example_modules_app_8bcbf33a1ca23af8_aws_s3_bucket_this",
+      "label": "aws_s3_bucket.this",
+      "degree": 7
+    },
+    {
+      "id": "baselines_docker_example_app_main_main",
+      "label": "main()",
+      "degree": 6
+    },
+    {
+      "id": "terraform_baselines_iam_terraform_aws_github_oidc_3fe8840dd2ab9597_local_trust_policy",
+      "label": "local.trust_policy",
+      "degree": 6
+    }
+  ],
+  "surprises": [
+    {
+      "source": "aws_accessanalyzer_analyzer.unused",
+      "target": "var.analyzer_name",
+      "source_files": [
+        "baselines/iam/terraform/aws-access-analyzer-unused/main.tf",
+        "baselines/iam/terraform/aws-access-analyzer-unused/variables.tf"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "references",
+      "why": "peripheral node `var.analyzer_name` unexpectedly reaches hub `aws_accessanalyzer_analyzer.unused`"
+    },
+    {
+      "source": "aws_accessanalyzer_analyzer.unused",
+      "target": "var.tags",
+      "source_files": [
+        "baselines/iam/terraform/aws-access-analyzer-unused/main.tf",
+        "baselines/iam/terraform/aws-access-analyzer-unused/variables.tf"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "references",
+      "why": "peripheral node `var.tags` unexpectedly reaches hub `aws_accessanalyzer_analyzer.unused`"
+    },
+    {
+      "source": "aws_accessanalyzer_analyzer.unused",
+      "target": "var.unused_access_age",
+      "source_files": [
+        "baselines/iam/terraform/aws-access-analyzer-unused/main.tf",
+        "baselines/iam/terraform/aws-access-analyzer-unused/variables.tf"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "references",
+      "why": "peripheral node `var.unused_access_age` unexpectedly reaches hub `aws_accessanalyzer_analyzer.unused`"
+    },
+    {
+      "source": "output.analyzer_arn",
+      "target": "aws_accessanalyzer_analyzer.unused",
+      "source_files": [
+        "baselines/iam/terraform/aws-access-analyzer-unused/outputs.tf",
+        "baselines/iam/terraform/aws-access-analyzer-unused/main.tf"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "references",
+      "why": "peripheral node `output.analyzer_arn` unexpectedly reaches hub `aws_accessanalyzer_analyzer.unused`"
+    },
+    {
+      "source": "output.analyzer_type",
+      "target": "aws_accessanalyzer_analyzer.unused",
+      "source_files": [
+        "baselines/iam/terraform/aws-access-analyzer-unused/outputs.tf",
+        "baselines/iam/terraform/aws-access-analyzer-unused/main.tf"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "references",
+      "why": "peripheral node `output.analyzer_type` unexpectedly reaches hub `aws_accessanalyzer_analyzer.unused`"
+    }
+  ],
+  "tokens": {
+    "input": 0,
+    "output": 0
+  }
+}

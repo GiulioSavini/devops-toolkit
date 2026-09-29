@@ -1,0 +1,133 @@
+# Reference hardened Deployment: passes the restricted Pod Security Standard,
+# runs the image built from baselines/docker/Dockerfile, and sets the
+# resource/probe fields that restricted itself does not enforce but that every
+# production workload needs anyway.
+#
+# tests/kubernetes-e2e.sh builds that image, loads it into a kind cluster,
+# applies this file into the `production` namespace (labelled restricted by
+# namespace-pss-restricted.yaml) and asserts the Deployment reaches Ready. A
+# single missing securityContext field here is rejected at admission — the pod
+# is never created, the Deployment just sits at 0/2 with the reason buried in
+# the ReplicaSet's events, which is the failure mode this file exists to
+# demonstrate the fix for.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hardened-app
+  namespace: production
+  labels:
+    app: hardened-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: hardened-app
+  template:
+    metadata:
+      labels:
+        app: hardened-app
+    spec:
+      serviceAccountName: app-reader
+      # Belt and braces with the ServiceAccount's own setting in
+      # rbac-least-privilege.yaml: stated here too so the Pod spec is
+      # self-documenting, and because the Pod-level field wins if someone
+      # flips the ServiceAccount back.
+      automountServiceAccountToken: false
+      securityContext:
+        # Required by restricted: the container must not run as root. The
+        # kubelet also refuses to start the container if the image's own user
+        # resolves to uid 0, which is the check that catches a base-image
+        # change that quietly went back to root.
+        runAsNonRoot: true
+        # Matches the distroless "nonroot" uid baked into the image. Set
+        # explicitly rather than inherited, so a future base-image change that
+        # picks a different uid shows up as a failing pod instead of a silent
+        # change of identity.
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        # Required by restricted: RuntimeDefault (the container runtime's
+        # curated seccomp profile) or Localhost with a named profile.
+        # Unconfined is rejected.
+        seccompProfile:
+          type: RuntimeDefault
+      # Deliberately NOT set here: appArmorProfile (GA since v1.31), which
+      # belongs in this same securityContext as "appArmorProfile: {type:
+      # RuntimeDefault}".
+      # It is the right thing to add on nodes that have AppArmor (Ubuntu,
+      # Debian), and it is a no-op-to-error on nodes that do not (RHEL family
+      # with SELinux instead, some managed node images), which would make
+      # this file non-portable and the end-to-end test environment-dependent.
+      # Decide per node pool, not per repository.
+      containers:
+        - name: app
+          # Pin a real tag, and a digest for anything you did not just build.
+          # The ValidatingAdmissionPolicy in vap-disallow-latest-tag.yaml
+          # rejects this Pod outright if the tag is missing or is "latest".
+          image: devops-toolkit/example-app:v1
+          # kind loads the image into the node's containerd store; without
+          # IfNotPresent the kubelet would try to pull it from Docker Hub and
+          # fail. In a real cluster this should be IfNotPresent with an
+          # immutable tag, or Always with a digest.
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            # requests are what the scheduler reserves; limits are what the
+            # kernel enforces. A pod with no memory limit can take a node down
+            # with it, and a namespace of pods with no requests makes the
+            # scheduler's decisions meaningless. Set both.
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi
+          # The example app keeps no state, so the read-only rootfs needs no
+          # writable volume. Anything that writes (caches, /tmp, rendered
+          # config) needs an explicit emptyDir, which is the Kubernetes
+          # equivalent of `docker run --tmpfs /tmp`:
+          #   volumeMounts:
+          #     - name: tmp
+          #       mountPath: /tmp
+          # and, at pod level:
+          #   volumes:
+          #     - name: tmp
+          #       emptyDir: {}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+# Service in front of the Deployment. tests/kubernetes-e2e.sh uses it as the
+# target for the NetworkPolicy assertions: a client pod in the same namespace
+# must reach it before default-deny is applied, and must TIME OUT (not be
+# refused) afterwards.
+apiVersion: v1
+kind: Service
+metadata:
+  name: hardened-app
+  namespace: production
+  labels:
+    app: hardened-app
+spec:
+  selector:
+    app: hardened-app
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

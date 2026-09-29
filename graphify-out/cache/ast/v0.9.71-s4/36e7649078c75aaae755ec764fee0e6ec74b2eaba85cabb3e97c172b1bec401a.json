@@ -1,0 +1,1 @@
+{"nodes": [{"id": "$graphify-root$_baselines_iam_terraform_gcp_github_wif_tests_wif_tftest_hcl", "label": "wif.tftest.hcl", "file_type": "code", "source_file": "baselines/iam/terraform/gcp-github-wif/tests/wif.tftest.hcl", "source_location": null, "type": "terraform_file"}], "edges": []}

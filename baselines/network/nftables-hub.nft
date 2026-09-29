@@ -1,0 +1,115 @@
+#!/usr/sbin/nft -f
+# Install as /etc/nftables.conf on the WireGuard hub, load with
+# `systemctl enable --now nftables.service`, validate before loading with
+# `nft -c -f /etc/nftables.conf`.
+#
+# Default-deny on all three base chains. Without this file the hub in
+# guides/network-zero-trust.md has WireGuard's own crypto as its only access
+# control — AllowedIPs stops off-tunnel traffic, but every other port
+# (management SSH, any service accidentally bound to 0.0.0.0) is reachable
+# from the internet. See the guide for the rollout order (log-only first).
+
+flush ruleset
+
+table inet filter {
+	# Replace with your actual bastion/jump host address(es) — see the
+	# "Bastion / jump design" section of the guide. This set, and the two
+	# below, are exactly what baselines/network/flowlog-segmentation.sh
+	# produces from observed flow logs: don't hand-guess these ranges.
+	set mgmt_bastion {
+		type ipv4_addr
+		flags interval
+		elements = { 203.0.113.10 }
+	}
+
+	# On-prem/site subnets reachable through this hub, one element per
+	# peer's AllowedIPs (excluding the /32 tunnel address itself).
+	set routed_sites {
+		type ipv4_addr
+		flags interval
+		elements = { 192.168.10.0/24 }
+	}
+
+	# Tunnel-internal addresses (the wg0 /24), used to scope forwarding to
+	# "tunnel peer talking to its own routed site", not "tunnel peer
+	# talking to the internet via this hub as an open relay".
+	set tunnel_peers {
+		type ipv4_addr
+		flags interval
+		elements = { 10.100.0.0/24 }
+	}
+
+	# Egress allowlist for the hub's own outbound traffic (not forwarded
+	# traffic — see the forward chain). Package mirrors, monitoring
+	# endpoint, etc. Empty destination sets fail closed: forgetting to add
+	# a destination here is a timeout, not a silent bypass.
+	# Starts empty on purpose (nftables rejects `elements = { }`; an empty
+	# set is simply declared with no elements line). Populate it from the
+	# observed flow-log matrix before relying on the output chain's
+	# default-deny — until then, everything through this rule times out.
+	set egress_v4 {
+		type ipv4_addr
+		flags interval
+	}
+
+	set dns_resolvers {
+		type ipv4_addr
+		elements = { 9.9.9.9, 149.112.112.112 }
+	}
+
+	chain input {
+		type filter hook input priority filter; policy drop;
+
+		iif lo accept
+		ct state established,related accept
+		ct state invalid drop comment "no state table entry: neither a new nor a tracked connection"
+
+		icmp type { echo-request, destination-unreachable, time-exceeded } accept
+		icmpv6 type { echo-request, destination-unreachable, time-exceeded, nd-neighbor-solicit, nd-neighbor-advert, nd-router-advert } accept
+
+		udp dport 51820 accept comment "WireGuard listener — this is the only port that should be open to the whole internet"
+
+		# Defense in depth: source restriction AND a rate limit. The
+		# source restriction is the real control; the rate limit only
+		# helps if the bastion's own key is compromised.
+		tcp dport 22 ip saddr @mgmt_bastion ct state new limit rate 15/minute accept comment "SSH mgmt, bastion only"
+
+		counter log prefix "nft-input-drop: " drop
+	}
+
+	chain forward {
+		type filter hook forward priority filter; policy drop;
+
+		ct state established,related accept
+		ct state invalid drop
+
+		# Tunnel peer -> its own routed site, and the reverse leg for new
+		# connections initiated from the site back into the tunnel. This
+		# is the segmentation control: it is what actually enforces
+		# "site A cannot reach site B through this hub" even though both
+		# are WireGuard peers of it — add one pair of rules per site, do
+		# not collapse to a single "wg0 in, wg0 out" rule or every spoke
+		# can reach every other spoke.
+		iifname "wg0" oifname != "wg0" ip saddr @tunnel_peers ip daddr @routed_sites ct state new accept comment "site A tunnel -> site A LAN"
+		iifname != "wg0" oifname "wg0" ip daddr @tunnel_peers ct state new accept comment "site A LAN -> its own tunnel peer (reply path for site-initiated connections)"
+
+		counter log prefix "nft-forward-drop: " drop
+	}
+
+	chain output {
+		type filter hook output priority filter; policy drop;
+
+		oif lo accept
+		ct state established,related accept
+
+		udp dport 51820 accept comment "WireGuard to spokes"
+		udp dport 123 accept comment "NTP — see 'Time sync' in observability-logging.md, correlation and TLS both depend on it"
+
+		udp dport 53 ip daddr @dns_resolvers accept
+		tcp dport 53 ip daddr @dns_resolvers accept comment "TCP fallback for large/DNSSEC responses"
+
+		tcp dport { 80, 443 } ip daddr @egress_v4 accept comment "explicit egress allowlist, not a blanket 80/443-to-anywhere rule"
+
+		counter log prefix "nft-output-drop: " drop
+	}
+}

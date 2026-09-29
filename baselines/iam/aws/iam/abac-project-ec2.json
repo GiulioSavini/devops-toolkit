@@ -1,0 +1,53 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "OperateOnlyOwnProjectInstances",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:StartInstances",
+        "ec2:StopInstances",
+        "ec2:RebootInstances"
+      ],
+      "Resource": "arn:aws:ec2:*:*:instance/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:ResourceTag/project": "${aws:PrincipalTag/project}"
+        }
+      }
+    },
+    {
+      "Sid": "DescribeIsNotTagScoped",
+      "Effect": "Allow",
+      "Action": "ec2:DescribeInstances",
+      "Resource": "*"
+    },
+    {
+      "Sid": "NoRetaggingOfAuthorizationKeys",
+      "Effect": "Deny",
+      "Action": [
+        "ec2:CreateTags",
+        "ec2:DeleteTags"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "ForAnyValue:StringEquals": {
+          "aws:TagKeys": [
+            "project"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "DenyWhenPrincipalHasNoProjectTag",
+      "Effect": "Deny",
+      "Action": "ec2:*",
+      "Resource": "*",
+      "Condition": {
+        "Null": {
+          "aws:PrincipalTag/project": "true"
+        }
+      }
+    }
+  ]
+}

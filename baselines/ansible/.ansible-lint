@@ -1,0 +1,19 @@
+---
+# `production` is ansible-lint's strictest built-in profile: it is the union of
+# the min/basic/moderate/safety/shared rule sets plus the rules Galaxy requires
+# of published content (FQCN everywhere, explicit file modes, no
+# `state: latest`, named tasks, no bare `command` without changed_when...).
+#
+# Pick the strictest profile the repository can actually pass and fail CI on
+# it. A profile that is configured but not enforced, or a long `skip_list`
+# that nobody revisits, is indistinguishable from no linting at all.
+profile: production
+
+exclude_paths:
+  # Collections installed by `ansible-galaxy install -r requirements.yml`.
+  - collections/
+  - .cache/
+
+# No skip_list and no warn_list on purpose. If a rule has to be silenced,
+# silence it on the single task with `# noqa: <rule>` and a comment saying
+# why, so the exception is reviewable in the diff that introduces it.

@@ -1,0 +1,85 @@
+# kube-apiserver:
+#   --encryption-provider-config=/etc/kubernetes/enc/encryption-config.yaml
+#   --encryption-provider-config-automatic-reload=true
+#
+# Encrypts Secrets (and anything else listed) at rest in etcd. Without this,
+# anyone who can read etcd's data directory or one of its snapshots — a backup
+# bucket, a disk snapshot, a stolen control-plane node — reads every Secret in
+# the cluster as plain text, with no API server and no RBAC in the way.
+#
+# How the list is read: for each `resources` entry, the FIRST provider is the
+# one used to ENCRYPT new writes. Every provider in the list, in order, is
+# tried when DECRYPTING. That is the whole mechanism behind key rotation and
+# provider migration: prepend the new provider, restart/reload, rewrite every
+# object, then drop the old provider.
+#
+# This file shows the end state of a migration from a locally-stored key to a
+# KMS: kms v2 encrypts, secretbox still decrypts what was written before.
+apiVersion: apiserver.config.k8s.io/v1
+kind: EncryptionConfiguration
+resources:
+  - resources:
+      - secrets
+      # Not secrets, but people store credentials in them anyway, and the
+      # cost of adding them is one more provider call per write.
+      - configmaps
+    providers:
+      # --- Encrypts everything from now on: KMS v2 ---
+      # Stable since v1.29, and the only option upstream rates "Strongest"
+      # together with the deprecated v1. It derives a fresh data-encryption key
+      # per write from a seed rather than calling the remote KMS on every
+      # encrypt (v1's behaviour, and why v1 is deprecated since v1.28 and
+      # disabled by default since v1.29 — it is still re-enablable via the
+      # KMSv1 feature gate, which you should not do).
+      #
+      # `endpoint` is a Unix socket served by a KMS plugin process on the
+      # control-plane node (cloud KMS plugin, Vault, an HSM front end). The API
+      # server never talks to the remote KMS directly, so the plugin is a
+      # component you have to run, monitor and keep available: if it is down,
+      # the API server cannot decrypt Secrets and everything that reads one
+      # starts failing. Alert on the apiserver_envelope_encryption_* metrics.
+      - kms:
+          apiVersion: v2
+          name: primary-kms
+          endpoint: unix:///var/run/kmsplugin/socket.sock
+          timeout: 3s
+
+      # --- Decrypts what the previous configuration wrote: secretbox ---
+      # Keep this until every object has been rewritten through the KMS
+      # provider, then delete it. Deleting it too early makes old Secrets
+      # permanently unreadable — there is no "re-encrypt on read".
+      #
+      # secretbox (XSalsa20-Poly1305) is upstream's "Strong" local-key option.
+      # Do NOT use `aescbc` here: upstream marks it "Weak — not recommended due
+      # to CBC's vulnerability to padding oracle attacks", and `aesgcm` is only
+      # recommended with automated rotation every 200,000 writes. All three
+      # keep the key material in this file, on the control-plane host, so a
+      # local key protects against a stolen etcd snapshot, not against a
+      # compromised control-plane node.
+      #
+      # secretbox requires exactly 32 bytes of key material, base64-encoded:
+      #   head -c 32 /dev/urandom | base64
+      # The value below is the right LENGTH (so this file is structurally
+      # valid and testable) but is a placeholder and MUST be replaced — it
+      # base64-decodes to the ASCII string "PLACEHOLDER-REPLACE-ME-32BYTES!!".
+      # A key published in a Git repository encrypts nothing.
+      - secretbox:
+          keys:
+            - name: key1
+              secret: UExBQ0VIT0xERVItUkVQTEFDRS1NRS0zMkJZVEVTISE=
+
+      # --- identity: plaintext. Present only during the FIRST migration ---
+      # (going from no encryption to encryption), so the API server can still
+      # read objects written before encryption was turned on. Remove it as soon
+      # as every object has been rewritten:
+      #
+      #   kubectl get secrets --all-namespaces -o json | kubectl replace -f -
+      #
+      # (or the Storage Version Migrator for a large cluster), then reload.
+      # Verify with etcdctl that the stored value is prefixed with
+      # k8s:enc:kms:v2: rather than starting with a readable manifest.
+      #
+      # Leaving identity in the list after migration means a future
+      # mis-ordering of this file silently downgrades the cluster to plaintext
+      # writes, and nothing fails to alert you.
+      - identity: {}

@@ -1,0 +1,38 @@
+# Install as /etc/sudoers.d/10-logging, owner root:root, mode 0440.
+#
+# VALIDATE BEFORE MOVING IT INTO PLACE - a syntax error anywhere under
+# /etc/sudoers.d breaks sudo for every user on the host:
+#   visudo -cf 10-logging && install -o root -g root -m 0440 10-logging \
+#     /etc/sudoers.d/10-logging
+# Keep a second root session open until `sudo -v` has worked once.
+#
+# Files in /etc/sudoers.d are read in lexical order and, unlike sshd, the LAST
+# matching Defaults wins, so a later file can still override these.
+# A filename containing "." or "~" is ignored outright.
+
+# Every sudo invocation to syslog (journal/authpriv) AND to a dedicated file.
+# The file is what audit rule "sudo-log" in audit/rules.d/30-hardening.rules
+# watches; without it that rule never fires. sudo creates it on first use.
+Defaults   syslog = authpriv
+Defaults   logfile = "/var/log/sudo.log"
+Defaults   log_year, loglinelen = 0
+
+# Run the command in a pseudo-terminal, so a program cannot escape the session
+# it was started from by fork()ing away from the tty. Also makes terminal
+# hijacking (TIOCSTI) unavailable. Default in sudo 1.9.14+; still set it
+# explicitly for the older sudo on Ubuntu 22.04.
+Defaults   use_pty
+
+# Do not echo the password, even when the tty cannot disable echo: without
+# this sudo falls back to visible input on some serial consoles.
+Defaults   !visiblepw
+
+# A forgotten sudo prompt should not sit there for five minutes, and the
+# credential cache should not outlive a short break.
+Defaults   passwd_timeout = 1
+Defaults   timestamp_timeout = 5
+
+# Full session capture (keystrokes and output) for the commands that matter.
+# Uncomment per command alias, not globally: the I/O logs contain everything
+# typed, including secrets pasted into an editor, and they grow fast.
+# Defaults>root  log_input, log_output, iolog_dir = /var/log/sudo-io

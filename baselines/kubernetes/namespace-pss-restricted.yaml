@@ -1,0 +1,35 @@
+# Pod Security Admission is a built-in admission controller (no webhook to
+# install) driven entirely by namespace labels — these six labels are the whole
+# configuration surface for it.
+#
+# enforce-version is pinned to the cluster's actual minor version, not
+# "latest". "latest" tracks whatever the running API server considers current,
+# so the same label produces a DIFFERENT effective policy on 1.35 vs 1.37, and
+# a control-plane upgrade silently changes what gets rejected in every
+# namespace that uses it — the opposite of what a security control should do.
+# Concretely: the restricted profile gained a control in v1.34 that rejects
+# probes and lifecycle hooks with a non-empty `host` field, so a namespace
+# labelled `enforce-version: latest` started rejecting previously-admitted
+# workloads the moment its control plane was upgraded to 1.34.
+#
+# Bump this label deliberately, in the same change that bumps the cluster's
+# Kubernetes version, after reading the Pod Security Standards changelog for
+# that release. If your cluster is on 1.35 or 1.36 (both still supported
+# upstream), set the version you are actually running — pinning to a version
+# NEWER than the API server is rejected.
+#
+# warn and audit are deliberately left unpinned (they default to "latest"):
+# that asymmetry is what surfaces "this workload will be rejected after the
+# next upgrade" as a kubectl warning and an audit annotation, before
+# enforce-version is bumped and it becomes a hard failure.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: production
+  labels:
+    # Also used by the ValidatingAdmissionPolicyBinding in
+    # vap-disallow-latest-tag.yaml to select which namespaces it applies to.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.37
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted

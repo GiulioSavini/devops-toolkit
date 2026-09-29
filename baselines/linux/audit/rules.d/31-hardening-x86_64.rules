@@ -1,0 +1,26 @@
+## x86_64 only. Install next to 30-hardening.rules.
+## 1) glibc on x86_64 still uses the legacy syscalls (chmod, open, unlink...)
+##    which do not exist on aarch64, so they cannot live in the neutral file.
+## 2) A 64-bit kernel with IA32 emulation accepts 32-bit syscalls, which have
+##    their own numbers: b64-only rules are bypassed by a 32-bit binary.
+## Loading this file on aarch64 fails with "Syscall name unknown".
+
+## Legacy b64 syscalls
+-a always,exit -F arch=b64 -S chmod -F auid>=1000 -F auid!=unset -k perm-mod
+-a always,exit -F arch=b64 -S chown,lchown -F auid>=1000 -F auid!=unset -k perm-mod
+-a always,exit -F arch=b64 -S open,creat -F exit=-EACCES -F auid>=1000 -F auid!=unset -k access
+-a always,exit -F arch=b64 -S open,creat -F exit=-EPERM -F auid>=1000 -F auid!=unset -k access
+-a always,exit -F arch=b64 -S unlink,rename,rmdir -F auid>=1000 -F auid!=unset -k delete
+
+## 32-bit ABI mirrors of every syscall rule in 30-hardening.rules
+-a always,exit -F arch=b32 -S adjtimex,settimeofday,clock_settime,stime -k time-change
+-a always,exit -F arch=b32 -S sethostname,setdomainname -k system-locale
+-a always,exit -F arch=b32 -C euid!=uid -F auid!=unset -S execve -k user-emulation
+-a always,exit -F arch=b32 -S chmod,fchmod,fchmodat -F auid>=1000 -F auid!=unset -k perm-mod
+-a always,exit -F arch=b32 -S chown,fchown,fchownat,lchown -F auid>=1000 -F auid!=unset -k perm-mod
+-a always,exit -F arch=b32 -S setxattr,lsetxattr,fsetxattr,removexattr,lremovexattr,fremovexattr -F auid>=1000 -F auid!=unset -k perm-mod
+-a always,exit -F arch=b32 -S open,creat,openat,truncate,ftruncate,open_by_handle_at -F exit=-EACCES -F auid>=1000 -F auid!=unset -k access
+-a always,exit -F arch=b32 -S open,creat,openat,truncate,ftruncate,open_by_handle_at -F exit=-EPERM -F auid>=1000 -F auid!=unset -k access
+-a always,exit -F arch=b32 -S mount,umount,umount2 -F auid>=1000 -F auid!=unset -k mounts
+-a always,exit -F arch=b32 -S unlink,unlinkat,rename,renameat,rmdir -F auid>=1000 -F auid!=unset -k delete
+-a always,exit -F arch=b32 -S init_module,finit_module,delete_module -k modules

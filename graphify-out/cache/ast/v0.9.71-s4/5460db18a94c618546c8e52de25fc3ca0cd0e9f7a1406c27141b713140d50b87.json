@@ -1,0 +1,1 @@
+{"nodes": [{"id": "$graphify-root$_baselines_iam_terraform_aws_github_oidc_tests_trust_policy_tftest_hcl", "label": "trust_policy.tftest.hcl", "file_type": "code", "source_file": "baselines/iam/terraform/aws-github-oidc/tests/trust_policy.tftest.hcl", "source_location": null, "type": "terraform_file"}], "edges": []}

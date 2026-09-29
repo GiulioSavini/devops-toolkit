@@ -1,0 +1,13 @@
+---
+- name: Apply the host baseline
+  hosts: all
+  gather_facts: true
+  # diff: true at play level means every file/template/lineinfile task shows
+  # what it would change. Combined with --check this is the dry run you can
+  # actually review; without it --check tells you "changed" and nothing else.
+  diff: true
+  # become is per play, not global (see ansible.cfg): the tasks that need root
+  # ask for it individually inside the role.
+  become: false
+  roles:
+    - role: hardening

@@ -1,0 +1,19 @@
+{
+  "icc": false,
+  "no-new-privileges": true,
+  "live-restore": true,
+  "userland-proxy": false,
+  "default-cgroupns-mode": "private",
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "50m",
+    "max-file": "5"
+  },
+  "default-ulimits": {
+    "nofile": {
+      "Name": "nofile",
+      "Soft": 1024,
+      "Hard": 4096
+    }
+  }
+}

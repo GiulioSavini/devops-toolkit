@@ -1,0 +1,15 @@
+---
+# Static YAML inventory. Group names are what the playbooks target; keep them
+# stable, because renaming a group silently makes every `hosts:` line that
+# references it match zero hosts — and a play that matches zero hosts exits 0.
+all:
+  children:
+    web:
+      hosts:
+        web01.example.internal:
+        web02.example.internal:
+        web03.example.internal:
+        web04.example.internal:
+    db:
+      hosts:
+        db01.example.internal:

@@ -1,0 +1,131 @@
+# Multi-window, multi-burn-rate SLO alerts, following the alerting chapter of
+# the Google SRE workbook (https://sre.google/workbook/alerting-on-slos/).
+# Requires the recording rules in slo-rules.yml.
+#
+# The arithmetic: burn rate 1 means the error budget is consumed exactly over
+# the compliance window (30d). Burn rate 14.4 means it is consumed 14.4x faster
+# — 2% of a 30d budget in 1h. The table below is the workbook's:
+#
+#   burn  long    short   budget spent when it fires   action
+#   14.4  1h      5m      2%                           page
+#   6     6h      30m     5%                           page
+#   3     1d      2h      10%                           ticket
+#   1     3d      6h      10%                           ticket
+#
+# Two properties make this worth the complexity over a single "error rate > 5%
+# for 10m" rule:
+#
+#   * The long window suppresses noise: a 30-second blip does not move the 1h
+#     ratio enough to cross 14.4x, so nobody is paged for it.
+#   * The short window bounds the reset time. Without it, a 1h window keeps the
+#     alert firing for the better part of an hour after the incident is over,
+#     and the on-call learns to ignore it.
+#
+# There is deliberately NO `for:` clause on these alerts. `for` would add
+# latency on top of the long window, and the short window already provides the
+# "is this still happening" check that `for` is usually there to provide. The
+# one thing to keep is `keep_firing_for`, so a flapping short window does not
+# resolve and re-page every evaluation.
+#
+# 99.9% over 30d is 43m of full outage a month. If that number is not one the
+# business has agreed to, these alerts are measuring an opinion.
+
+groups:
+  - name: slo_burn_rate
+    rules:
+      # --- page -------------------------------------------------------------
+      # 14.4x over 1h (still burning in the last 5m) OR 6x over 6h (still
+      # burning in the last 30m). One alert, not two, so a slow-then-fast
+      # incident does not page twice for the same cause.
+      - alert: ErrorBudgetBurnFast
+        expr: |
+          (
+            job:slo_errors_per_request:ratio_rate1h
+              > on(job) group_left() (14.4 * slo:error_budget_ratio:target)
+            and
+            job:slo_errors_per_request:ratio_rate5m
+              > on(job) group_left() (14.4 * slo:error_budget_ratio:target)
+          )
+          or
+          (
+            job:slo_errors_per_request:ratio_rate6h
+              > on(job) group_left() (6 * slo:error_budget_ratio:target)
+            and
+            job:slo_errors_per_request:ratio_rate30m
+              > on(job) group_left() (6 * slo:error_budget_ratio:target)
+          )
+        keep_firing_for: 5m
+        labels:
+          severity: page
+          slo: availability
+        annotations:
+          summary: >-
+            {{ $labels.job }} is burning its availability budget fast
+            (ratio {{ $value | humanizePercentage }})
+          description: >-
+            At this rate the 30d error budget is gone in hours, not weeks.
+            Check the deploy that landed before the burn started.
+          runbook_url: https://runbooks.internal/slo/error-budget-burn
+          dashboard_url: https://grafana.internal/d/slo-availability
+
+      # --- ticket -----------------------------------------------------------
+      # 3x over 1d (short 2h) OR 1x over 3d (short 6h). These are real and need
+      # fixing, but not at 03:00 — routed to a queue by Alertmanager.
+      - alert: ErrorBudgetBurnSlow
+        expr: |
+          (
+            job:slo_errors_per_request:ratio_rate1d
+              > on(job) group_left() (3 * slo:error_budget_ratio:target)
+            and
+            job:slo_errors_per_request:ratio_rate2h
+              > on(job) group_left() (3 * slo:error_budget_ratio:target)
+          )
+          or
+          (
+            job:slo_errors_per_request:ratio_rate3d
+              > on(job) group_left() (1 * slo:error_budget_ratio:target)
+            and
+            job:slo_errors_per_request:ratio_rate6h
+              > on(job) group_left() (1 * slo:error_budget_ratio:target)
+          )
+        keep_firing_for: 1h
+        labels:
+          severity: ticket
+          slo: availability
+        annotations:
+          summary: >-
+            {{ $labels.job }} is slowly burning its availability budget
+            (ratio {{ $value | humanizePercentage }})
+          description: >-
+            Not page-worthy on its own, but the budget will run out before the
+            window resets if this continues. Fix it in working hours.
+          runbook_url: https://runbooks.internal/slo/error-budget-burn
+
+  # ---------------------------------------------------------------------------
+  # Two alerts that are about the monitoring, not the service. Without them a
+  # dead exporter looks exactly like a healthy service: no errors, no alerts.
+  # ---------------------------------------------------------------------------
+  - name: monitoring_meta
+    rules:
+      - alert: TargetDown
+        expr: up == 0
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "{{ $labels.job }}/{{ $labels.instance }} has been unscrapable for 10m"
+          runbook_url: https://runbooks.internal/monitoring/target-down
+
+      # Clock skew breaks log/trace correlation and TLS, and it silently
+      # corrupts rate() over a remote-write path. See the "Time sync" section
+      # of guides/observability-logging.md.
+      - alert: ClockSkewDetected
+        expr: |
+          abs(node_timex_offset_seconds) > 0.05
+          or node_timex_sync_status == 0
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "{{ $labels.instance }} clock is unsynchronised or >50ms off"
+          runbook_url: https://runbooks.internal/monitoring/clock-skew

@@ -1,0 +1,11 @@
+{
+  "source": ["aws.sts"],
+  "detail-type": ["AWS API Call via CloudTrail"],
+  "detail": {
+    "eventSource": ["sts.amazonaws.com"],
+    "eventName": ["AssumeRole"],
+    "requestParameters": {
+      "roleArn": [{ "wildcard": "arn:aws:iam::*:role/OrgBreakGlass" }]
+    }
+  }
+}

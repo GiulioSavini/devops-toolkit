@@ -1,0 +1,34 @@
+---
+# ansible-builder definition (schema version 3). Build it with:
+#
+#   ansible-builder build -f execution-environment.yml -t devops-toolkit-ee:1.0.0
+#
+# Why bother: "works on my laptop" for Ansible means a specific ansible-core, a
+# specific set of collections, and a specific set of Python libraries that the
+# modules import on the *controller*. An execution environment freezes all
+# three into one image, so the controller in CI, the one in AWX and the one on
+# your laptop are the same machine. It also removes the class of failure where a
+# collection bump on the controller changes behaviour on hosts nobody touched.
+version: 3
+
+images:
+  base_image:
+    # Pinned by digest, not by tag: the tag moves. awx-ee is the community
+    # execution-environment base (ansible-runner already inside).
+    name: quay.io/ansible/awx-ee:24.6.1@sha256:89593d2a0268acacdbd1c075d8810ab50d961cf7769e36de19219bb6cb4efcc1
+
+dependencies:
+  # Same pin the repository lints and tests with.
+  ansible_core:
+    package_pip: ansible-core==2.21.4
+  ansible_runner:
+    package_pip: ansible-runner==2.4.3
+  # The collections come from the same pinned file the playbooks use, so the
+  # image cannot drift away from the source tree.
+  galaxy: requirements.yml
+  python:
+    # Needed by the json_query filter and by several community.general modules.
+    - jmespath==1.1.0
+  system:
+    - openssh-clients [platform:rpm]
+    - rsync [platform:rpm]

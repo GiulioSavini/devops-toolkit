@@ -1,0 +1,29 @@
+# Must be applied together with networkpolicy-default-deny.yaml. Without
+# this, default-deny blocks DNS and every symptom looks like "the service is
+# down" (timeout) when the actual cause is "the client couldn't resolve the
+# name" — check `kubectl exec <pod> -- nslookup kubernetes.default` first
+# when default-deny is in play and things stop working.
+#
+# This matches by port, not by selecting the DNS pods themselves
+# (namespaceSelector matching kube-system + podSelector on k8s-app: kube-dns
+# or k8s-app: coredns). Selecting by port is more portable: the DNS pod
+# label differs across CoreDNS installs and managed offerings, and a
+# CoreDNS restart or migration to node-local-dns should not silently
+# re-block every pod in the namespace. The trade-off is that pods can also
+# reach anything ELSE on port 53 — acceptable for DNS but re-add a
+# destination selector if that matters in your threat model.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: production
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
