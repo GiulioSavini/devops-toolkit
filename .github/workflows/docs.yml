@@ -1,4 +1,10 @@
-name: Docs
+### Three jobs, each with one reason to exist and each able to fail the build.
+###
+### Every action is pinned to a full commit SHA with the tag it belonged to in
+### the comment above it: a tag is a mutable pointer that upstream can move, a
+### SHA is not. Resolve one with:
+###   gh api repos/<owner>/<repo>/git/ref/tags/<tag> --jq .object.sha
+name: CI
 
 on:
   push:
@@ -8,22 +14,84 @@ on:
     # Links rot. Catch it on a schedule, not when a reader reports it.
     - cron: '0 5 * * 1'
 
+# Deny by default, grant per job. Without this, a repository whose default token
+# is read/write hands every job a write token.
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   markdownlint:
     name: Lint markdown
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: DavidAnson/markdownlint-cli2-action@v16
+      - name: Checkout
+        # actions/checkout@v6.1.0
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      - name: markdownlint-cli2
+        # DavidAnson/markdownlint-cli2-action@v20.0.0
+        uses: DavidAnson/markdownlint-cli2-action@992badcdf24e3b8eb7e87ff9287fe931bcb00c6e
         with:
           globs: '**/*.md'
 
+  baselines:
+    name: Validate baselines
+    runs-on: ubuntu-24.04
+    # The suite builds images, boots containers and downloads pinned provider
+    # binaries; it is minutes, not seconds.
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        # actions/checkout@v6.1.0
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      - name: Run every baseline test
+        # `make test` runs tests/*.sh except the Kubernetes end-to-end suite,
+        # which needs a kind cluster and runs in the separate job below. Each
+        # script proves its own baselines with the real tool and fails the build
+        # on a violation: no `|| true`, no `continue-on-error`.
+        run: make test
+
+  kubernetes-e2e:
+    name: Kubernetes end-to-end
+    # A real cluster is only worth the minutes on the default branch and on a
+    # pull request that touches the Kubernetes baselines or the suite itself.
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        # actions/checkout@v6.1.0
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      - name: Create a kind cluster and assert the baselines hold
+        # The script pins kind and the node image by digest and deletes the
+        # cluster in a trap, including when an assertion fails.
+        run: make e2e
+
   links:
     name: Check links
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: lycheeverse/lychee-action@v2
+      - name: Checkout
+        # actions/checkout@v6.1.0
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      - name: lychee
+        # lycheeverse/lychee-action@v2.7.0
+        uses: lycheeverse/lychee-action@a8c4c7cb88f0c7386610c35eb25108e448569cb0
         with:
           args: --no-progress --max-concurrency 4 './**/*.md'
           fail: true

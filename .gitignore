@@ -1,0 +1,12 @@
+# Local tooling output and local agent/editor scratch files: not part of the
+# published repository.
+graphify-out/
+node_modules/
+CLAUDE.md
+.claudeignore
+
+# Scratch files a local run of the test suite can leave behind.
+*.sarif
+*.tfstate
+*.tfstate.backup
+.terraform/

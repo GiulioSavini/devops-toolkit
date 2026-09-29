@@ -7,9 +7,12 @@ ROOT="$(pwd)"
 BASE="baselines/iam"
 [[ -d "$BASE" ]] || { echo "run from the repository root" >&2; exit 2; }
 
-PYTHON_IMAGE="python:3.13.15-slim-trixie"
-TERRAFORM_IMAGE="hashicorp/terraform:1.16.4"
-SHELLCHECK_IMAGE="koalaman/shellcheck:v0.11.0"
+# Pinned by digest, not by tag: a tag can be re-pushed to point at a different
+# image, so a run that "used the same version" can still execute different code.
+# The tag each digest belonged to on 2026-09-29 is in the comment.
+PYTHON_IMAGE="python@sha256:7c61056e61ac89e852de05f3dc6fa51a6dd2181797bceed46aa725dd7cb2cd3b"          # python:3.13.15-slim-trixie
+TERRAFORM_IMAGE="hashicorp/terraform@sha256:985cdc6c1d9b0a65b83377f666efd2f740b47f02ac55be1ced3d18f7d3b0e829" # hashicorp/terraform:1.16.4
+SHELLCHECK_IMAGE="koalaman/shellcheck@sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d" # koalaman/shellcheck:v0.11.0
 PARLIAMENT_VERSION="1.6.4"
 # parliament 1.6.4 imports pkg_resources, which setuptools removed in 81.
 SETUPTOOLS_VERSION="75.8.0"
