@@ -26,8 +26,8 @@ K8S_DIR="$ROOT_DIR/baselines/kubernetes"
 KUBECONFORM_IMAGE="ghcr.io/yannh/kubeconform@sha256:6b90a5f23d846140ce0194fe050b1995e546eba938f3a6bf10c039dd5e24588f"
 YQ_IMAGE="mikefarah/yq@sha256:cfc4eee658595834ef304eadb0c3ea721f3b7cb6404ad8b7cb909cc5b5145b23"
 PYTHON_IMAGE="python@sha256:7c61056e61ac89e852de05f3dc6fa51a6dd2181797bceed46aa725dd7cb2cd3b"
-KIND_NODE_IMAGE="kindest/node@sha256:07b2536e30b803ed61d1677a79df6115f798ce64c80f9e22f6ed45afd09323c0"
-K8S_VERSION="1.35.0"
+KIND_NODE_IMAGE="kindest/node@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5"
+K8S_VERSION="1.37.0"
 
 yq() { docker run --rm -v "$K8S_DIR:/w:ro" "$YQ_IMAGE" e "$@"; }
 
@@ -66,7 +66,13 @@ if grep -qE "failed to decode|could not find expected|yaml:" "$KUBELET_OUT"; the
   echo "FAIL: kubelet-config.yaml is not valid YAML/KubeletConfiguration:" >&2
   exit 1
 fi
-if ! grep -q "kubelet dependencies" "$KUBELET_OUT"; then
+# Positive marker that the file was accepted: the kubelet must get far enough
+# to start initialising. On a node image where it proceeds further it prints
+# "kubelet dependencies"; from 1.37 it stops earlier, at the first missing
+# runtime prerequisite ("failed to run Kubelet: open
+# /etc/kubernetes/pki/ca.crt"), which it can only reach with a decoded config.
+# Requiring one of the two keeps a silent run (no output at all) a failure.
+if ! grep -qE "kubelet dependencies|failed to run Kubelet" "$KUBELET_OUT"; then
   echo "FAIL: kubelet did not get past config loading (unexpected output above)" >&2
   exit 1
 fi
