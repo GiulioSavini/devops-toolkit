@@ -1,8 +1,11 @@
-### Three jobs, each with one reason to exist and each able to fail the build.
+### Four jobs, each with one reason to exist and each able to fail the build.
 ###
-### Every action is pinned to a full commit SHA with the tag it belonged to in
-### the comment above it: a tag is a mutable pointer that upstream can move, a
-### SHA is not. Resolve one with:
+### Every action is pinned to a full commit SHA, with the tag it belonged to in a
+### trailing comment on the same line: a tag is a mutable pointer that upstream
+### can move, a SHA is not. The comment goes AFTER the pin, not above it, because
+### Dependabot rewrites a same-line comment when it bumps the SHA and leaves one
+### on the line above untouched — which is how a pin ends up documented as a
+### version it is not. Resolve a tag with:
 ###   gh api repos/<owner>/<repo>/git/ref/tags/<tag> --jq .object.sha
 name: CI
 
@@ -31,11 +34,9 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        # actions/checkout@v6.1.0
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: markdownlint-cli2
-        # DavidAnson/markdownlint-cli2-action@v20.0.0
-        uses: DavidAnson/markdownlint-cli2-action@992badcdf24e3b8eb7e87ff9287fe931bcb00c6e
+        uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff # v24.2.0
         with:
           globs: '**/*.md'
 
@@ -49,8 +50,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        # actions/checkout@v6.1.0
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Run every baseline test
         # `make test` runs tests/*.sh except the Kubernetes end-to-end suite,
         # which needs a kind cluster and runs in the separate job below. Each
@@ -72,8 +72,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        # actions/checkout@v6.1.0
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Create a kind cluster and assert the baselines hold
         # The script pins kind and the node image by digest and deletes the
         # cluster in a trap, including when an assertion fails.
@@ -87,11 +86,9 @@ jobs:
       contents: read
     steps:
       - name: Checkout
-        # actions/checkout@v6.1.0
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: lychee
-        # lycheeverse/lychee-action@v2.7.0
-        uses: lycheeverse/lychee-action@a8c4c7cb88f0c7386610c35eb25108e448569cb0
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
         with:
           args: --no-progress --max-concurrency 4 './**/*.md'
           fail: true

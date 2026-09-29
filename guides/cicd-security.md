@@ -56,13 +56,21 @@ What it is not for:
 These are the rules [`security.yml`](../baselines/cicd/security.yml) states at
 the top of the file and follows without exception.
 
-**1. Every third-party action is pinned to a full commit SHA.**
+**1. Every third-party action is pinned to a full commit SHA, with the tag in a
+trailing comment on the same line.**
 
 ```yaml
 - name: Checkout
-  # actions/checkout@v6.1.0
-  uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+  uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 ```
+
+The trailing position is not cosmetic. **Dependabot rewrites a comment that sits
+after the SHA on the same line, and cannot touch one on the line above.** This
+repository originally wrote the tag above the pin; the first Dependabot bump
+changed four SHAs and left every comment claiming the old version, which is worse
+than no comment — a reviewer reads `# v6.1.0` next to a v7 SHA and approves it.
+`tests/cicd.sh` now asserts the format, and rejects both a bare tag and a
+comment on the line above.
 
 Tags are mutable: `@v4` and even `@v4.2.1` are pointers the upstream repository
 can move, and a compromised maintainer account moves them. A SHA cannot be
@@ -72,7 +80,7 @@ resolved, so a human can read the file and Dependabot can still bump it.
 Resolve and verify a tag before writing it down:
 
 ```bash
-gh api repos/actions/checkout/git/ref/tags/v6.1.0 --jq .object.sha
+gh api repos/actions/checkout/git/ref/tags/v7.0.1 --jq .object.sha
 ```
 
 **2. Every tool runs from a container pinned by tag *and* digest.**

@@ -54,6 +54,14 @@ docker run --rm -v "$K8S_DIR:/w:ro" "$PYTHON_IMAGE" \
 echo "==> real kubelet binary: kubelet-config.yaml must decode without unknown fields"
 KUBELET_OUT="$(mktemp)"
 trap 'rm -f "$KUBELET_OUT"' EXIT
+# Pull first, untimed. The node image is ~350 MB, so on a cold cache the pull
+# alone takes longer than the timeout below: wrapping `docker run` in `timeout 8`
+# kills it during the pull, the kubelet never runs, and the captured output is
+# nothing but pull progress. That is exactly how this check failed on a fresh CI
+# runner while passing on a laptop that already had the image.
+docker pull -q "$KIND_NODE_IMAGE" >/dev/null
+# The timeout now applies only to the kubelet itself, which is expected to die
+# quickly on a missing runtime prerequisite.
 timeout 8 docker run --rm -v "$K8S_DIR:/cfg:ro" --entrypoint /usr/bin/kubelet "$KIND_NODE_IMAGE" \
   --config=/cfg/kubelet-config.yaml > "$KUBELET_OUT" 2>&1 || true
 cat "$KUBELET_OUT"

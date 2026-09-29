@@ -122,5 +122,45 @@ run_precommit_validate baselines/cicd/.pre-commit-config.yaml \
   || fail "pre-commit validate-config failed on the checked-in config"
 pass "pre-commit validate-config passes on baselines/cicd/.pre-commit-config.yaml"
 
+### 4. every action pin is a SHA with a maintainable tag comment -----------
+# The pin format is a control, so it is checked rather than trusted: a bare tag
+# is a mutable pointer, and a tag comment on the line ABOVE the pin cannot be
+# updated by Dependabot, so it goes stale on the first bump and then states a
+# version that is not running.
+echo "### 4. action pin format"
+check_pin_format() {
+  local file="$1" bad=0 line
+  while IFS= read -r line; do
+    # Every `uses:` that names a third-party action (owner/repo@ref) must carry a
+    # 40-character SHA and a trailing "# vX.Y.Z" comment. A local `uses: ./path`
+    # is not pinned to anything and is excluded deliberately.
+    case "$line" in
+      *"uses:"*"./"*) continue ;;
+    esac
+    if ! printf '%s' "$line" | grep -qE 'uses: +[A-Za-z0-9._-]+/[A-Za-z0-9._/-]+@[0-9a-f]{40} +# +v[0-9]'; then
+      echo "    not pinned with a trailing tag comment: ${line# }" >&2
+      bad=$((bad + 1))
+    fi
+    # `- uses:` and a bare `uses:` are both valid YAML here, so the filter has to
+    # accept the list-item form too — a filter that misses it makes this whole
+    # check silently vacuous, which is how the control below first passed.
+  done < <(grep -E '^[[:space:]]*-?[[:space:]]*uses:' "$file")
+  echo "$bad"
+}
+
+for f in baselines/cicd/security.yml baselines/cicd/security-caller-example.yml baselines/terraform/ci/plan.yml; do
+  BAD="$(check_pin_format "$f")"
+  [[ "$BAD" == "0" ]] || fail "$f has $BAD action pin(s) that are not a SHA with a trailing tag comment"
+done
+pass "every action pin is a SHA with a trailing tag comment Dependabot can maintain"
+
+echo "### 4b. control: the pin check must reject a bare tag and a comment above"
+BAD_PIN="$WORKDIR/pin-bad.yml"
+printf 'jobs:\n  j:\n    steps:\n      - uses: actions/checkout@v4\n' > "$BAD_PIN"
+[[ "$(check_pin_format "$BAD_PIN")" != "0" ]] || fail "the pin check accepted a bare tag"
+printf 'jobs:\n  j:\n    steps:\n      # actions/checkout@v7.0.1\n      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1\n' > "$BAD_PIN"
+[[ "$(check_pin_format "$BAD_PIN")" != "0" ]] || fail "the pin check accepted a tag comment on the line above, which Dependabot cannot maintain"
+pass "a bare tag and an above-the-line tag comment are both rejected"
+
 echo
 echo "All CI/CD baseline checks passed."

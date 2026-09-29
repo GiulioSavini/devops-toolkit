@@ -7,6 +7,9 @@
 ### role; if they are, every fork PR author is one template-injection away from
 ### your production account.
 ###
+### Every action is pinned to a commit SHA with its tag in a trailing comment on
+### the same line, which is the only position Dependabot can keep up to date.
+###
 ### Copy to .github/workflows/terraform-plan.yml and adjust paths/roles.
 name: Terraform plan
 
@@ -43,12 +46,10 @@ jobs:
       pull-requests: write # post the plan as a comment
     steps:
       - name: Checkout
-        # actions/checkout@v6.1.0
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Configure AWS credentials (OIDC, no stored keys)
-        # aws-actions/configure-aws-credentials@v5.1.0
-        uses: aws-actions/configure-aws-credentials@00943011d9042930efac3dcd3a170e4273319bc8
+        uses: aws-actions/configure-aws-credentials@00943011d9042930efac3dcd3a170e4273319bc8 # v5.1.0
         with:
           # A role whose trust policy names this repo AND this ref, and whose
           # permission policy is read-only (plus write access to the state
@@ -58,8 +59,7 @@ jobs:
           role-duration-seconds: 900
 
       - name: Setup Terraform
-        # hashicorp/setup-terraform@v3.1.2
-        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
         with:
           terraform_version: 1.16.4
           # The wrapper rewrites stdout, which breaks `-detailed-exitcode`
@@ -112,8 +112,7 @@ jobs:
             test -p policy example/modules/app/main.tf
 
       - name: Upload plan
-        # actions/upload-artifact@v4.6.2
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: tfplan
           # The binary plan and plan.json contain every attribute value in the
