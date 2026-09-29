@@ -1,0 +1,85 @@
+# Kubelet hardening, distributed via --config (not command-line flags, which
+# are deprecated for everything below). Merge these keys into the kubelet
+# config your provisioning tool already manages — do not replace the whole
+# file blindly, cgroupDriver/clusterDNS/etc. are cluster-specific.
+#
+# Validated by tests/kubernetes.sh: the real kubelet binary (extracted from
+# the pinned kind node image) is run with --config pointed at this file and
+# the run must NOT log "Using lenient decoding as strict decoding failed",
+# which is kubelet's own signal that a key here does not exist in the
+# KubeletConfiguration schema it was compiled with — the same typo class
+# that, on a real node, is silently ignored instead of failing loudly.
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+
+authentication:
+  # Default is true. An anonymous, unauthenticated caller gets whatever
+  # RBAC grants to system:anonymous — usually nothing, but "usually" is not
+  # a control. Combined with authorization.mode: AlwaysAllow (the other
+  # insecure default) this is how kubelet APIs get scraped from the internet.
+  anonymous:
+    enabled: false
+  webhook:
+    # Bearer tokens presented to the kubelet are checked against the API
+    # server via TokenReview instead of only against a static file.
+    enabled: true
+  x509:
+    # CA that signed client certs the kubelet will accept for authentication
+    # (normally the cluster CA distributed by your bootstrap process).
+    clientCAFile: /etc/kubernetes/pki/ca.crt
+
+authorization:
+  # Default is AlwaysAllow: any authenticated caller can hit any kubelet API,
+  # including /exec and /run on every pod on that node. Webhook defers the
+  # decision to the API server's SubjectAccessReview, i.e. real RBAC.
+  mode: Webhook
+
+# Kubelet will refuse to start if the host's kernel parameters
+# (vm.overcommit_memory, kernel.panic, kernel.panic_on_oops, ...) do not
+# match the values kubelet itself would set. This catches a compromised or
+# misconfigured node early instead of running on kernel settings kubelet
+# didn't expect. See "Common failure modes" — this is also what breaks
+# kubelet inside kind/Docker Desktop VMs, since the host sysctls are not
+# under the cluster's control there.
+protectKernelDefaults: true
+
+# The unauthenticated, unencrypted read-only port. Default is 0 (disabled)
+# since Kubernetes 1.24; stated explicitly here so a fleet-wide diff shows
+# intent instead of relying on the default not changing.
+readOnlyPort: 0
+
+# Client certificate rotation: kubelet requests a new client cert via CSR
+# before the current one expires, instead of going NotReady cluster-wide on
+# a fixed renewal date picked by whoever ran kubeadm.
+rotateCertificates: true
+
+# Every pod that does not set its own seccompProfile gets RuntimeDefault
+# instead of Unconfined. GA since v1.27. This is the single highest-value line
+# in this file for a cluster that cannot yet enforce the restricted Pod
+# Security Standard everywhere: it closes the default-unconfined gap for
+# workloads nobody has reviewed. Workloads that genuinely need a blocked
+# syscall must then ask for it explicitly with a Localhost profile, which is a
+# reviewable change rather than an invisible default.
+seccompDefault: true
+
+# Cap the number of processes a single pod can create. Unset means unlimited,
+# i.e. one fork bomb in one container takes the whole node's pid space with it
+# and makes every other pod on that node unschedulable and unreachable.
+podPidsLimit: 4096
+
+# Close idle exec/attach/port-forward streams. Without this a forgotten
+# `kubectl exec` session (or one an attacker left open) stays attached
+# indefinitely.
+streamingConnectionIdleTimeout: 5m
+
+# Serving certificate rotation. Confusingly, the command-line flag for this
+# is --rotate-server-certificates, but the KubeletConfiguration field is
+# serverTLSBootstrap, not "rotateServerCertificates" (that name does not
+# exist in the API). Requires a CSR approver (kube-controller-manager's
+# built-in signer handles kubernetes.io/kubelet-serving with automatic
+# approval only if you enable it; most managed clusters need
+# kubelet-csr-approver or equivalent).
+serverTLSBootstrap: true
+
+# Reject TLS 1.0/1.1 connections to the kubelet API server.
+tlsMinVersion: VersionTLS12

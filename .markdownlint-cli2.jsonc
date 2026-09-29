@@ -5,8 +5,14 @@
     // Duplicate headings are fine across sibling guides.
     "MD024": { "siblings_only": true },
     // Snippets are illustrative; a bare "```" block is intentional in places.
-    "MD040": false
+    "MD040": false,
+    // Tables are written in the compact "|---|---|" form on purpose; padding
+    // every cell to column width makes editing them a chore in return for
+    // nothing a reader sees.
+    "MD060": false
   },
   "globs": ["**/*.md"],
-  "ignores": ["node_modules"]
+  // CLAUDE.md is a local, untracked scratch file for tooling; it is not
+  // part of the published documentation.
+  "ignores": ["node_modules", "CLAUDE.md"]
 }

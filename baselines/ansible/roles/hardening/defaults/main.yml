@@ -1,0 +1,31 @@
+---
+# Every variable is prefixed with the role name. ansible-lint's production
+# profile enforces it (var-naming[no-role-prefix]) and it stops two roles from
+# silently fighting over a generic name like `admin_user`.
+
+hardening_admin_user: ops
+
+# THE distro trap. Debian and Ubuntu ship a `sudo` group; RHEL, Rocky, Alma and
+# Fedora ship `wheel` and have no `sudo` group at all. A task hard-coded to
+# `groups: sudo` fails on RHEL with "Group sudo does not exist" — or, worse,
+# succeeds after someone "fixes" it by creating an empty `sudo` group that
+# grants nothing, leaving the account with no path to root and the play green.
+# Derive it from facts instead.
+hardening_privileged_group: "{{ 'wheel' if ansible_facts['os_family'] == 'RedHat' else 'sudo' }}"
+
+# Supplied by the caller (inventory, or a sops-encrypted group_vars file).
+# Empty by default so the role fails loudly rather than configuring an account
+# nobody can log into.
+hardening_admin_pubkey: ""
+
+# Optional: an agent token. When set it is written with no_log so it does not
+# appear in --diff output or in the callback log. Empty means "skip".
+hardening_agent_token: ""
+hardening_agent_config_dir: /etc/monitoring
+
+hardening_sysctls:
+  net.ipv4.conf.all.rp_filter: "1"
+  net.ipv4.conf.all.accept_redirects: "0"
+  net.ipv4.conf.all.send_redirects: "0"
+  net.ipv6.conf.all.accept_redirects: "0"
+  kernel.randomize_va_space: "2"

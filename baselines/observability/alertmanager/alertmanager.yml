@@ -1,0 +1,137 @@
+# Alertmanager routing for the SLO burn-rate alerts in
+# baselines/observability/prometheus/slo-alerts.yml. Validate with
+# `amtool check-config`; prove the routing tree (not just its syntax) with
+# `amtool config routes test`, see tests/observability.sh.
+#
+# The severity vocabulary here is the one the alert rules actually emit:
+# `severity: page` (ErrorBudgetBurnFast — the fast multi-window burn) and
+# `severity: ticket` (ErrorBudgetBurnSlow — the slow one), plus
+# `severity: ticket` again on the two monitoring_meta alerts. "page" is this
+# file's critical tier and "ticket" is its warning tier, named for where the
+# notification goes rather than for the textbook severity words — matching
+# label names invented for a guide, instead of the ones the rules file
+# actually sets, is how a routing tree silently never matches anything.
+
+global:
+  resolve_timeout: 5m
+
+# Alertmanager can notify Slack, PagerDuty, email, webhooks and more. Every
+# one of those needs a credential, and every credential here is a `_file`
+# path (`api_url_file` on the Slack receivers below, `url_file` on the
+# webhook receiver — never the plain `api_url` / `url` sibling field), or
+# failing that an environment-substituted placeholder, NEVER an inline
+# value. Two independent reasons:
+#   1. This file is meant to be readable — for review, for tests, for
+#      whoever debugs routing at 03:00 — and a Slack webhook or PagerDuty
+#      integration key inlined here is a bearer credential sitting in a
+#      config file that ends up in git history, CI logs and ConfigMaps.
+#   2. `amtool check-config` and `tests/observability.sh` both read and echo
+#      this file as part of validating it. A secret that must never appear
+#      in a diff or a test log cannot be inline in the file that diff and
+#      log come from.
+# The referenced files are expected to be mounted read-only at runtime (a
+# Kubernetes Secret volume, a SOPS-decrypted file, Vault Agent's template
+# output) — never checked into this repository.
+
+templates: []
+
+route:
+  # Grouped by alertname + job: the burn-rate alerts already carry a `job`
+  # label naming the SLO they're about, and grouping on it means a checkout
+  # incident and a search incident never merge into one notification just
+  # because they fired in the same minute — the on-call needs to know which
+  # service to look at without opening the alert.
+  group_by: ["alertname", "job"]
+  # 30s: long enough that a burst of alerts belonging to the same group
+  # (the fast and slow burn triggering together, or a re-evaluation firing
+  # both windows of one alert) collapses into a single notification instead
+  # of paging once per rule. Short enough that this is still "at 03:00 you
+  # find out within the minute", not "you find out at the top of the hour".
+  group_wait: 30s
+  # How long to wait before sending a notification about new alerts added to
+  # an ALREADY-notified group. 5m: new alerts for a group already paging
+  # ride along on the existing incident instead of re-paging immediately for
+  # every rule that crosses its threshold a few seconds apart.
+  group_interval: 5m
+  # How long a still-firing alert waits before being re-sent. 4h at the root
+  # is deliberately long — this is the fallback for anything that matches no
+  # child route below; the two routes that matter override it explicitly.
+  repeat_interval: 4h
+  receiver: default-fallback
+
+  routes:
+    # --- critical: pages, short cycle ---------------------------------
+    # ErrorBudgetBurnFast and the two monitoring_meta ticket alerts are NOT
+    # here — this route matches on severity, not alertname, so anything
+    # newly added with severity: page inherits paging behaviour with no
+    # routing-tree edit required.
+    - matchers:
+        - severity = "page"
+      receiver: page-slack-critical
+      group_wait: 10s
+      group_interval: 2m
+      # 1h: a page that nobody has acknowledged in an hour needs to page
+      # again, on the assumption the first one was missed, not that the
+      # incident is still being worked without an ack.
+      repeat_interval: 1h
+      continue: false
+
+    # --- warning: tickets, long cycle ----------------------------------
+    - matchers:
+        - severity = "ticket"
+      receiver: ticket-queue
+      group_wait: 5m
+      group_interval: 30m
+      # 24h: these are "fix it in working hours" alerts (see the annotation
+      # text in slo-alerts.yml). Re-notifying every hour just trains
+      # whoever owns the queue to mute the channel.
+      repeat_interval: 24h
+      continue: false
+
+inhibit_rules:
+  # The critical-inhibits-warning pairing the guide calls for: if the fast
+  # burn-rate alert (severity: page) is already firing for a job, the slow
+  # burn-rate alert (severity: ticket) for the SAME job is redundant — the
+  # page already means someone is looking at that job's error rate, and a
+  # second, lower-urgency notification about the same underlying budget burn
+  # adds noise without adding information. `equal: [job, slo]` is what scopes
+  # this to the SAME job's SAME SLO, so a checkout page never inhibits a
+  # search ticket.
+  - source_matchers:
+      - severity = "page"
+      - slo = "availability"
+    target_matchers:
+      - severity = "ticket"
+      - slo = "availability"
+    equal: ["job", "slo"]
+
+receivers:
+  - name: default-fallback
+    # Anything matching neither child route (a future alert shipped with no
+    # severity label, for instance) still reaches a human instead of
+    # vanishing into an unmatched route — the routing-tree equivalent of the
+    # audit policy's catch-all rule in guides/kubernetes-hardening.md.
+    slack_configs:
+      - api_url_file: /etc/alertmanager/secrets/slack_default_url
+        channel: "#alerts-unrouted"
+        send_resolved: true
+
+  - name: page-slack-critical
+    slack_configs:
+      - api_url_file: /etc/alertmanager/secrets/slack_page_url
+        channel: "#pages"
+        send_resolved: true
+        title: '{{ .CommonLabels.alertname }}: {{ .CommonLabels.job }}'
+        text: >-
+          {{ range .Alerts }}{{ .Annotations.summary }}
+          runbook: {{ .Annotations.runbook_url }}
+          {{ end }}
+
+  - name: ticket-queue
+    # A generic webhook stands in for whatever ticketing system actually
+    # ingests these (Jira, an internal queue). The URL is still a credential
+    # in practice (query-string tokens are common), so it is a `url_file`
+    # like the Slack receivers above, not a literal `url:`.
+    webhook_configs:
+      - url_file: /etc/alertmanager/secrets/ticket_webhook_url
+        send_resolved: true

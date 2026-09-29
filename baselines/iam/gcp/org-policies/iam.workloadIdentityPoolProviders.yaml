@@ -1,0 +1,9 @@
+# gcloud org-policies set-policy iam.workloadIdentityPoolProviders.yaml --update-mask=spec
+# Only these OIDC issuers can be configured as workload identity pool
+# providers. Stops a project owner from federating an arbitrary IdP.
+name: organizations/ORG_ID/policies/iam.workloadIdentityPoolProviders
+spec:
+  rules:
+    - values:
+        allowedValues:
+          - https://token.actions.githubusercontent.com

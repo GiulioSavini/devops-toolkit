@@ -1,0 +1,49 @@
+# restic --exclude-file. One pattern per line; a leading ! re-includes.
+#
+# Two reasons a path is here: it is not data (it can be rebuilt), or backing it
+# up is actively wrong (it is another backup, or it is enormous and changes
+# constantly, or it is a socket-like thing that cannot be restored).
+
+# Pseudo-filesystems. --one-file-system covers most of this, but a bind mount
+# inside a backed-up path does not respect it.
+/proc/**
+/sys/**
+/dev/**
+/run/**
+
+# Volatile or regenerable state.
+/tmp/**
+/var/tmp/**
+/var/cache/**
+/var/lib/apt/lists/**
+/var/lib/docker/**
+/var/lib/containerd/**
+/swap.img
+/swapfile
+
+# The backup's own cache and any local repository: backing up a backup doubles
+# the size and restores nothing useful.
+/var/cache/restic/**
+/var/lib/restic/**
+**/.restic-cache/**
+
+# Package and build caches. --exclude-caches already honours CACHEDIR.TAG, which
+# covers most of these; the explicit patterns are for the tools that do not
+# write the tag.
+**/node_modules/**
+**/.terraform/**
+**/__pycache__/**
+**/.cache/**
+**/target/debug/**
+
+# Big, regenerable media caches.
+**/.thumbnails/**
+**/.local/share/Trash/**
+
+# Databases must NOT be copied from the filesystem while running: the files are
+# a torn snapshot and restore as corruption. Exclude the data directory and back
+# the database up with its own dump or snapshot tooling, into a path that IS in
+# BACKUP_PATHS.
+/var/lib/mysql/**
+/var/lib/postgresql/**
+/var/lib/etcd/**

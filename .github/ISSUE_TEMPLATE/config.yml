@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report privately
+    url: https://github.com/GiulioSavini/devops-toolkit/blob/main/SECURITY.md
+    about: For guidance that is dangerous enough that you would rather not post it publicly.

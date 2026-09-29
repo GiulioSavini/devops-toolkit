@@ -1,0 +1,57 @@
+---
+- name: Roll the web tier out one batch at a time
+  hosts: web
+  gather_facts: true
+  diff: true
+  become: true
+  # serial turns one big blast radius into three. The first batch is a single
+  # canary; if it fails, max_fail_percentage: 0 aborts the play before the
+  # second batch starts, so three of four hosts are still serving the old
+  # version. Without serial, Ansible works on all hosts in parallel and a bad
+  # package takes the whole tier down at once.
+  serial:
+    - 1
+    - 25%
+    - 100%
+  # 0 means "any failed host in a batch stops the rollout". The percentage is
+  # evaluated per batch, and it is exclusive: with 4 hosts in a batch,
+  # max_fail_percentage: 25 tolerates 0 failures (25% of 4 is 1, and the check
+  # is "more than"), which is the off-by-one that makes people think it is
+  # broken. If you want "tolerate one host", say so with a bigger batch and a
+  # number you have actually worked out.
+  max_fail_percentage: 0
+  tasks:
+    - name: Drain the host from the load balancer
+      ansible.builtin.uri:
+        url: "{{ web_loadbalancer_api }}/pools/web/members/{{ inventory_hostname }}/drain"
+        method: POST
+        status_code: [200, 204]
+      # The LB API call runs from the controller, not from the host being
+      # drained - that host is about to stop answering.
+      delegate_to: localhost
+      become: false
+      changed_when: true
+
+    - name: Install the pinned application version
+      ansible.builtin.package:
+        name: "{{ web_app_package }}={{ web_app_version }}"
+        state: present
+
+    - name: Wait for the health endpoint to report ready
+      ansible.builtin.uri:
+        url: "{{ web_health_url }}"
+        status_code: 200
+      register: web_health
+      until: web_health.status == 200
+      retries: 12
+      delay: 5
+      changed_when: false
+
+    - name: Return the host to the load balancer
+      ansible.builtin.uri:
+        url: "{{ web_loadbalancer_api }}/pools/web/members/{{ inventory_hostname }}/enable"
+        method: POST
+        status_code: [200, 204]
+      delegate_to: localhost
+      become: false
+      changed_when: true

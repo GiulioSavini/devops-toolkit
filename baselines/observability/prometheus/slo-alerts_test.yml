@@ -1,0 +1,253 @@
+# Unit tests for slo-rules.yml and slo-alerts.yml, run with:
+#   promtool test rules slo-alerts_test.yml
+# (from inside baselines/observability/prometheus/; see tests/observability.sh
+# for the containerised, digest-pinned invocation).
+#
+# Why this file exists at all: `promtool check rules` only proves the PromQL
+# parses and the rule graph has no dangling references. It cannot tell you
+# whether ErrorBudgetBurnFast fires when it should, or — just as
+# important — whether it stays quiet on a service that is well within its
+# error budget. The multi-window burn-rate logic in slo-alerts.yml is four
+# nested comparisons across six recording rules; the only way to know the
+# arithmetic is right is to feed it synthetic traffic and watch it fire, or
+# not. An alert rule nobody has ever seen fire is a rule that does not work.
+#
+# `http_requests_total` values below are chosen so the resulting error ratio
+# sits deliberately far from each threshold (roughly 1.3-4x over, or well
+# under), not just barely past it — this is testing the arithmetic, not
+# chasing floating-point edges.
+
+rule_files:
+  - slo-rules.yml
+  - slo-alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  # ---------------------------------------------------------------------
+  # ErrorBudgetBurnFast: 14.4x over 1h (confirmed by 5m) OR 6x over 6h
+  # (confirmed by 30m). checkout's target is 0.001 (99.9%), so 14.4x is a
+  # 1.44% error ratio. This case runs a constant 2% error ratio for 70
+  # minutes — long enough for both the 1h and 5m windows to be fully
+  # populated at eval_time — which clears the 1.44% bar with room to
+  # spare and must fire.
+  # ---------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{job="checkout",status="200"}'
+        values: "0+98x70"
+      - series: 'http_requests_total{job="checkout",status="500"}'
+        values: "0+2x70"
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: ErrorBudgetBurnFast
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              slo: availability
+              job: checkout
+            exp_annotations:
+              summary: "checkout is burning its availability budget fast (ratio 2%)"
+              description: >-
+                At this rate the 30d error budget is gone in hours, not weeks.
+                Check the deploy that landed before the burn started.
+              runbook_url: https://runbooks.internal/slo/error-budget-burn
+              dashboard_url: https://grafana.internal/d/slo-availability
+
+  # ---------------------------------------------------------------------
+  # Same alert, same job, comfortably INSIDE budget: a 0.05% error ratio is
+  # below the 1.44% (14.4x) bar and the 0.6% (6x) bar. This is the case that
+  # proves the alert does not simply fire on any errors at all — a rule that
+  # always fires is exactly as useless as one that never does, and only
+  # looking at the "fires" case would miss it.
+  # ---------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{job="checkout",status="200"}'
+        values: "0+1995x70"
+      - series: 'http_requests_total{job="checkout",status="500"}'
+        values: "0+1x70"
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: ErrorBudgetBurnFast
+        exp_alerts: []
+
+  # ---------------------------------------------------------------------
+  # ErrorBudgetBurnFast, branch isolation: 270 minutes of clean traffic
+  # followed by a real 90-minute incident at a 2% error ratio, still
+  # ongoing at eval_time. This is the case that actually exercises the
+  # "multi-window" part of multi-window burn-rate, rather than a single
+  # constant ratio that trivially satisfies every window at once. The
+  # incident has to be LONGER than the 1h window (not just long enough to
+  # clear its threshold): a 90-minute incident means the 1h window sits
+  # entirely inside it with room on both sides, so the reported ratio has
+  # plateaued and does not depend on exactly which minute promtool happens
+  # to evaluate — see the note on rule-group evaluation order below.
+  #
+  #   ratio_rate5m  = 2%      (last 5m is entirely inside the incident)
+  #   ratio_rate1h  = 2%      (1h window is entirely inside the incident
+  #                            too — 90m > 60m — comfortably past 1.44%)
+  #   ratio_rate30m = 2%      (same reasoning, irrelevant to the outcome:
+  #                            branch 2 fails on its 6h leg regardless)
+  #   ratio_rate6h  ~= 0.496% (6h window: the same 90 incident minutes
+  #                            diluted by 4.5 clean HOURS — below the 0.6%
+  #                            bar)
+  #
+  # So branch 1 (14.4x over 1h, confirmed by 5m) is true, and branch 2 (6x
+  # over 6h, confirmed by 30m) is false because its own long window — not
+  # its short one — stays under the bar. The alert must still fire, on
+  # branch 1 alone. Corrupt the `14.4` constant upward and this is the case
+  # that catches it: with only branch 2 available and its 6h leg false, an
+  # incident of this exact size would stop paging.
+  #
+  # A real problem hit writing this case: the FIRST version used a
+  # 30-minute incident timed to end exactly at eval_time, which made the 1h
+  # ratio still change minute to minute — and `promtool test rules` gave a
+  # DIFFERENT ratio (2.801% one run, 2.901% the next) across separate
+  # invocations of the identical file with no changes. The cause is real
+  # and worth knowing: `slo-rules.yml` (recording rules) and
+  # `slo-alerts.yml` (the alert that reads them) are two different rule
+  # FILES, and Prometheus gives no ordering guarantee between rule groups
+  # in different files at the same evaluation tick — the alert can read the
+  # recording rule's value from one tick behind, and which one a given
+  # process run picks is effectively random. Splitting an alert from the
+  # recording rules it depends on is still correct (see the comment at the
+  # top of slo-rules.yml for why), but it means a test built to catch a
+  # single sharp transition can land on either side of that transition. The
+  # fix here is not a retry loop — it is choosing an incident long enough
+  # that both the current tick's value and the previous tick's value read
+  # the same plateaued number, so which one promtool happens to pick no
+  # longer matters.
+  # ---------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'http_requests_total{job="checkout",status="200"}'
+        values: "0+500x269 135000+490x89"
+      - series: 'http_requests_total{job="checkout",status="500"}'
+        values: "0+0x269 0+10x89"
+    alert_rule_test:
+      - eval_time: 359m
+        alertname: ErrorBudgetBurnFast
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              slo: availability
+              job: checkout
+            exp_annotations:
+              summary: "checkout is burning its availability budget fast (ratio 2%)"
+              description: >-
+                At this rate the 30d error budget is gone in hours, not weeks.
+                Check the deploy that landed before the burn started.
+              runbook_url: https://runbooks.internal/slo/error-budget-burn
+              dashboard_url: https://grafana.internal/d/slo-availability
+
+  # ---------------------------------------------------------------------
+  # ErrorBudgetBurnSlow, branch 1: 3x over 1d (confirmed by 2h). search's
+  # target is 0.005 (99.5%), so 3x is a 1.5% error ratio. A constant 2%
+  # ratio held for a little over a day clears it. The 1d window is the
+  # expensive one to simulate — this is deliberately the only case in this
+  # file that runs a multi-day series, to keep `promtool test rules`
+  # runtime reasonable.
+  # ---------------------------------------------------------------------
+  - interval: 5m
+    input_series:
+      - series: 'http_requests_total{job="search",status="200"}'
+        values: "0+490x300"
+      - series: 'http_requests_total{job="search",status="500"}'
+        values: "0+10x300"
+    alert_rule_test:
+      - eval_time: 25h
+        alertname: ErrorBudgetBurnSlow
+        exp_alerts:
+          - exp_labels:
+              severity: ticket
+              slo: availability
+              job: search
+            exp_annotations:
+              summary: "search is slowly burning its availability budget (ratio 2%)"
+              description: >-
+                Not page-worthy on its own, but the budget will run out before the
+                window resets if this continues. Fix it in working hours.
+              runbook_url: https://runbooks.internal/slo/error-budget-burn
+
+  # ---------------------------------------------------------------------
+  # Same alert, comfortably inside budget: a 0.1% error ratio is below both
+  # the 1.5% (3x/1d) and the 0.5% (1x/3d) branches. Confirms the slow
+  # burn-rate alert does not fire on background noise either.
+  # ---------------------------------------------------------------------
+  - interval: 5m
+    input_series:
+      - series: 'http_requests_total{job="search",status="200"}'
+        values: "0+499x300"
+      - series: 'http_requests_total{job="search",status="500"}'
+        values: "0+1x300"
+    alert_rule_test:
+      - eval_time: 25h
+        alertname: ErrorBudgetBurnSlow
+        exp_alerts: []
+
+  # ---------------------------------------------------------------------
+  # TargetDown: a target that stops reporting `up` looks, to every other
+  # rule in this file, exactly like a healthy service with zero traffic — no
+  # errors, no burn, no page. This is the rule that closes that gap.
+  # `for: 10m` means it must stay down continuously; 15 minutes of `up == 0`
+  # clears that.
+  # ---------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'up{job="checkout",instance="10.0.0.1:9100"}'
+        values: "0x15"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: TargetDown
+        exp_alerts:
+          - exp_labels:
+              job: checkout
+              instance: "10.0.0.1:9100"
+              severity: ticket
+            exp_annotations:
+              summary: "checkout/10.0.0.1:9100 has been unscrapable for 10m"
+              runbook_url: https://runbooks.internal/monitoring/target-down
+
+  # A target that is up the whole time must never trigger TargetDown.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="checkout",instance="10.0.0.1:9100"}'
+        values: "1x15"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: TargetDown
+        exp_alerts: []
+
+  # ---------------------------------------------------------------------
+  # ClockSkewDetected: 0.2s of drift is well past the 0.05s bar, held past
+  # the 10m `for:` window.
+  # ---------------------------------------------------------------------
+  - interval: 1m
+    input_series:
+      - series: 'node_timex_offset_seconds{instance="10.0.0.1:9100"}'
+        values: "0.2x15"
+      - series: 'node_timex_sync_status{instance="10.0.0.1:9100"}'
+        values: "1x15"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: ClockSkewDetected
+        exp_alerts:
+          - exp_labels:
+              instance: "10.0.0.1:9100"
+              severity: ticket
+            exp_annotations:
+              summary: "10.0.0.1:9100 clock is unsynchronised or >50ms off"
+              runbook_url: https://runbooks.internal/monitoring/clock-skew
+
+  # A host that is synchronised and within 5ms the whole time must not fire.
+  - interval: 1m
+    input_series:
+      - series: 'node_timex_offset_seconds{instance="10.0.0.1:9100"}'
+        values: "0.005x15"
+      - series: 'node_timex_sync_status{instance="10.0.0.1:9100"}'
+        values: "1x15"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: ClockSkewDetected
+        exp_alerts: []

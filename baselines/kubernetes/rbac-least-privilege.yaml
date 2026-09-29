@@ -1,0 +1,103 @@
+# The shape most application ServiceAccounts should have: namespaced, no
+# wildcards, no Secrets, no cluster scope, and no token mounted into pods that
+# never call the API server.
+#
+# Verbs and resources to treat as privileged when reviewing any Role, from the
+# upstream RBAC good-practices guide — each of these is an escalation path, not
+# just "broad access":
+#
+#   escalate      — bypasses the rule that you cannot grant rights you do not
+#                   hold; a principal with it can widen its own Role.
+#   bind          — same bypass, via creating a binding to a Role it does not
+#                   hold itself.
+#   impersonate   — act as another user, group or ServiceAccount, inheriting
+#                   all of its permissions (and muddying every audit trail).
+#   secrets get / list / watch
+#                 — all three equally dangerous: a list or watch response
+#                   embeds the full contents of every Secret it returns, so
+#                   "read-only" is not a mitigation.
+#   create on pods— implicitly grants every Secret, ConfigMap and PV mountable
+#                   in that namespace, plus the API rights of whatever
+#                   ServiceAccount the new pod runs as.
+#   pods/exec, pods/attach, pods/portforward, ephemeralcontainers
+#                 — code execution inside an existing container, with that
+#                   container's identity and mounted credentials.
+#   nodes/proxy   — direct kubelet API access: exec on every pod on the node,
+#                   bypassing admission control. `get` on it is not read-only.
+#   serviceaccounts/token (create)
+#                 — mints a usable bearer token for any ServiceAccount in
+#                   scope.
+#   persistentvolumes (create)
+#                 — hostPath PVs expose the node filesystem to a pod.
+#   validating/mutatingwebhookconfigurations, validating/mutatingadmission-
+#   policies       — see (and, when mutating, rewrite) every admitted object.
+#   certificatesigningrequests/approval
+#                 — mint client certificates with arbitrary subjects, including
+#                   ones that duplicate system components.
+#
+# Audit for them with, e.g.:
+#   kubectl get clusterroles -o json | jq -r '
+#     .items[] | select([.rules[]? | .verbs[]?] |
+#     any(. == "*" or . == "escalate" or . == "bind" or . == "impersonate")) |
+#     .metadata.name'
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: app-reader
+  namespace: production
+# Default is true: every pod using this ServiceAccount gets a token mounted at
+# /var/run/secrets/kubernetes.io/serviceaccount whether or not the workload
+# ever calls the API server. A token the application never uses is still a
+# credential for whoever gets code execution in that container — and the first
+# thing an attacker does in a container is read that path. Set
+# automountServiceAccountToken: true on the few Pod specs that genuinely need
+# it instead; the Pod-level setting overrides this one.
+automountServiceAccountToken: false
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: configmap-reader
+  namespace: production
+rules:
+  # get + list + watch, not "*": this workload reads config, it does not
+  # create, update, patch or delete it, and it has no business touching
+  # Secrets, Pods, or anything outside its own namespace.
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+---
+# When a workload genuinely needs one Secret, name it. resourceNames narrows
+# get, update, patch and delete to specific objects.
+#
+# The trap: resourceNames CANNOT restrict list or watch, because those requests
+# do not name an object — the API server cannot filter a collection request by
+# name, so a rule with `verbs: ["list"]` and `resourceNames` either grants
+# nothing usable or (if you also grant list without names) grants every Secret
+# in the namespace. If your client library "lists Secrets to find one", change
+# the client to get it by name. Likewise, create and deletecollection cannot be
+# restricted by resourceNames: the name does not exist yet, or is plural.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: app-db-credential-reader
+  namespace: production
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["app-db-credentials"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: app-reader-configmap-reader
+  namespace: production
+subjects:
+  - kind: ServiceAccount
+    name: app-reader
+    namespace: production
+roleRef:
+  kind: Role
+  name: configmap-reader
+  apiGroup: rbac.authorization.k8s.io

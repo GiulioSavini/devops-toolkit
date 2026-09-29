@@ -1,0 +1,11 @@
+---
+# Connection identity. Never a shared root login: one unprivileged account per
+# automation platform, escalating through the sudoers rule the hardening role
+# installs, so `journalctl _COMM=sudo` attributes every change.
+ansible_user: ansible
+ansible_ssh_private_key_file: ~/.ssh/id_ed25519_ansible
+
+# Secrets do NOT belong here. This file is plaintext in git. Anything sensitive
+# goes in inventory/group_vars/<group>.sops.yml, encrypted with the age
+# recipients in baselines/secrets/.sops.yaml and decrypted at runtime by the
+# community.sops vars plugin enabled in ansible.cfg.

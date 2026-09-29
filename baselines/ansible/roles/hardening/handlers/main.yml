@@ -1,0 +1,8 @@
+---
+- name: Restart monitoring agent
+  ansible.builtin.systemd_service:
+    name: monitoring-agent
+    state: restarted
+  # A handler that runs under --check would report a restart that never
+  # happened. Ansible already skips handlers in check mode; this is here to
+  # make the intent explicit for anyone adding `check_mode: false` above.

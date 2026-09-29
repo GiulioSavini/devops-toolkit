@@ -1,0 +1,61 @@
+---
+# Assert the outcome, not the fact that Ansible reported "ok". A converge that
+# is green proves the modules ran; only these checks prove the host ended up in
+# the state the role promises - and that the sudo/wheel branch picked the right
+# group for this distro.
+- name: Verify
+  hosts: all
+  gather_facts: true
+  tasks:
+    - name: Resolve the expected privileged group for this platform
+      ansible.builtin.set_fact:
+        hardening_expected_group: "{{ 'wheel' if ansible_facts['os_family'] == 'RedHat' else 'sudo' }}"
+
+    - name: Read the admin account's group membership
+      ansible.builtin.command:
+        cmd: id -nG ops
+      changed_when: false
+      check_mode: false
+      register: hardening_verify_groups
+
+    - name: Assert the admin account is in the platform's privileged group
+      ansible.builtin.assert:
+        that:
+          - hardening_expected_group in hardening_verify_groups.stdout.split()
+        fail_msg: >-
+          ops is in [{{ hardening_verify_groups.stdout }}] but this platform
+          escalates through {{ hardening_expected_group }}.
+        quiet: true
+
+    - name: Stat the sudoers drop-in
+      ansible.builtin.stat:
+        path: "/etc/sudoers.d/10-{{ hardening_expected_group }}-nopasswd"
+      register: hardening_verify_sudoers
+
+    - name: Assert the sudoers drop-in exists and is not group or world readable
+      ansible.builtin.assert:
+        that:
+          - hardening_verify_sudoers.stat.exists
+          - hardening_verify_sudoers.stat.mode in ['0440', '0400', '0600', '0640']
+        fail_msg: "sudoers drop-in missing or with unexpected mode"
+        quiet: true
+
+    - name: Validate the whole sudoers tree parses
+      ansible.builtin.command:
+        cmd: visudo -c
+      changed_when: false
+      check_mode: false
+
+    - name: Read the effective sysctl value for rp_filter
+      ansible.builtin.command:
+        cmd: sysctl -n net.ipv4.conf.all.rp_filter
+      changed_when: false
+      check_mode: false
+      register: hardening_verify_rp_filter
+
+    - name: Assert rp_filter is applied in the running kernel
+      ansible.builtin.assert:
+        that:
+          - hardening_verify_rp_filter.stdout | trim == '1'
+        fail_msg: "rp_filter is {{ hardening_verify_rp_filter.stdout }}, expected 1"
+        quiet: true

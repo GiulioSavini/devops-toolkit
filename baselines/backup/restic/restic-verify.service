@@ -1,0 +1,44 @@
+# The restore drill, as a unit. `restic check` proves the repository is
+# internally consistent; only a restore proves the backup is a backup. This is
+# the unit whose failure should page someone.
+[Unit]
+Description=restic restore verification (drill)
+Documentation=https://restic.readthedocs.io/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/restic/restic.env
+# -c compares the restored tree with the live one. Point -p at a path that does
+# not change every second, or the comparison is noise.
+ExecStart=/usr/local/bin/restic-restore-verify.sh -p /etc -c
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectProc=invisible
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+CacheDirectory=restic
+Environment=RESTIC_CACHE_DIR=/var/cache/restic
+ReadWritePaths=/var/cache/restic
+# The restore needs somewhere to write the restored tree. PrivateTmp gives it a
+# per-unit /tmp that is discarded when the unit stops, so a drill cannot fill
+# the host's /tmp permanently.
+Nice=15
+IOSchedulingClass=idle
+TimeoutStartSec=4h
+
+[Install]
+WantedBy=multi-user.target

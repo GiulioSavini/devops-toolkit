@@ -1,0 +1,48 @@
+# Administrator ~/.ssh/config (or /etc/ssh/ssh_config.d/ for a shared jump
+# host, minus the ControlMaster block). Requires OpenSSH 8.2+ on the client.
+#
+# ssh_config is also first-match-wins: specific Host blocks go ABOVE `Host *`,
+# otherwise the defaults below would shadow them.
+#
+# One-time setup:  install -d -m 700 ~/.ssh/cm
+# (ssh does not create the ControlPath directory; without it the master
+# connection fails with "cannot bind to path").
+
+Host bastion
+    HostName bastion.example.com
+    User ops
+
+# Everything in prod goes through the bastion. The key never leaves this
+# machine: ProxyJump tunnels the second SSH session through the first.
+Host prod-*
+    ProxyJump bastion
+    User admin
+
+Host *
+    # Offer only the keys listed here, not every key in the agent. Avoids
+    # "Too many authentication failures" against MaxAuthTries 3.
+    IdentitiesOnly yes
+    IdentityFile ~/.ssh/id_ed25519_sk
+    IdentityFile ~/.ssh/id_ed25519
+    # Keys added on first use expire from the agent after 8 hours.
+    AddKeysToAgent 8h
+
+    # Never forward the agent or X11 by default; see the guide for why.
+    ForwardAgent no
+    ForwardX11 no
+
+    HashKnownHosts yes
+    # Accept additional/rotated host keys the server announces over an
+    # already-authenticated connection (hostkeys-00@openssh.com), so planned
+    # host key rotation does not break known_hosts.
+    UpdateHostKeys yes
+
+    ServerAliveInterval 60
+    ServerAliveCountMax 3
+
+    # Connection sharing. %C is a hash of local host, remote host, port and
+    # user: fixed length (unix socket paths are limited to ~108 bytes) and no
+    # shell-special characters.
+    ControlMaster auto
+    ControlPath ~/.ssh/cm/%C
+    ControlPersist 10m

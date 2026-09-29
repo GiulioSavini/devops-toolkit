@@ -1,0 +1,22 @@
+# Default-deny for both directions, scoped to one namespace via podSelector: {}
+# (every pod in this namespace) plus policyTypes covering both Ingress and
+# Egress. NetworkPolicies are additive/allow-list: once ANY policy selects a
+# pod for a given direction, that direction goes from "allow all" to
+# "allow nothing except what an Allow policy explicitly permits" for that pod.
+#
+# Applying only this file breaks every pod in the namespace, including DNS
+# resolution — kube-dns/CoreDNS traffic is regular pod egress, not something
+# the cluster exempts automatically. You MUST apply
+# networkpolicy-allow-dns.yaml in the same change, or every pod in the
+# namespace starts failing DNS lookups a few seconds after this applies
+# (however long in-flight connections and cached resolutions last).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: production
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress

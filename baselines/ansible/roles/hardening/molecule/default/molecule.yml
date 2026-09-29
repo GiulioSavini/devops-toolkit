@@ -1,0 +1,55 @@
+---
+# Two platforms on purpose: Debian (privileged group `sudo`) and Enterprise
+# Linux (privileged group `wheel`). The role's os_family conditional is the
+# thing under test, and a single-distro scenario would never have caught the
+# `groups: sudo` bug this baseline exists to fix.
+#
+# Molecule needs a working container runtime. tests/ansible.sh lints and
+# syntax-checks this scenario but does NOT converge it, because the test suite
+# is expected to run anywhere bash and docker are present and a converge needs
+# privileged, systemd-capable containers. Run it yourself where you have
+# docker or podman:
+#
+#   cd baselines/ansible/roles/hardening && molecule test
+#
+# Images are pinned by digest. geerlingguy publishes only the `latest` tag for
+# these, so a digest is the only way to get a reproducible run; re-resolve it
+# when you want the newer image.
+driver:
+  name: docker
+
+platforms:
+  - name: hardening-debian13
+    image: geerlingguy/docker-debian13-ansible@sha256:891e0581de91cbe414dca1008546b1d6a7e0e4f94c1e3ed53a3dffc3a5493f7c
+    pre_build_image: true
+    privileged: true
+    cgroupns_mode: host
+    command: /lib/systemd/systemd
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+
+  - name: hardening-rocky9
+    image: geerlingguy/docker-rockylinux9-ansible@sha256:c266ef401e0a9974bdf769514613e93f92c8dda21caa23377855c4dc87731e5c
+    pre_build_image: true
+    privileged: true
+    cgroupns_mode: host
+    command: /usr/sbin/init
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+
+provisioner:
+  name: ansible
+  config_options:
+    defaults:
+      interpreter_python: auto_silent
+      callbacks_enabled: profile_tasks
+  inventory:
+    group_vars:
+      all:
+        hardening_admin_pubkey: >-
+          ssh-ed25519
+          AAAAC3NzaC1lZDI1NTE5AAAAIAnEGBpYNeOw9mnR/mNas4tXp5PJGnQOaubKcDdV7kco
+          molecule@example.internal
+
+verifier:
+  name: ansible

@@ -1,0 +1,22 @@
+# gcloud org-policies set-policy iam.managed.allowedPolicyMembers.yaml --update-mask=dryRunSpec
+# then, after reviewing dry-run violations in the audit log:
+# gcloud org-policies set-policy iam.managed.allowedPolicyMembers.yaml --update-mask=spec
+#
+# Domain-restricted sharing: only principals from your organization (plus the
+# explicitly listed subjects) can be granted IAM roles. Your own organization
+# principal set is NOT allowed implicitly; it must be listed.
+name: organizations/ORG_ID/policies/iam.managed.allowedPolicyMembers
+spec:
+  rules:
+    - enforce: true
+      parameters:
+        allowedPrincipalSets:
+          - //cloudresourcemanager.googleapis.com/organizations/ORG_ID
+        allowedMemberSubjects: []
+dryRunSpec:
+  rules:
+    - enforce: true
+      parameters:
+        allowedPrincipalSets:
+          - //cloudresourcemanager.googleapis.com/organizations/ORG_ID
+        allowedMemberSubjects: []

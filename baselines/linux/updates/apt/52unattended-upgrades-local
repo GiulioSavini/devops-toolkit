@@ -1,0 +1,22 @@
+// Install as /etc/apt/apt.conf.d/52unattended-upgrades-local. It sorts after
+// the package's 50unattended-upgrades and overrides only behaviour; the
+// allowed origins stay at the package default (the distro's -security pocket,
+// plus ESM on Ubuntu Pro), which is what you want on servers.
+
+// Kernel and libc updates need a reboot. Keep reboots under your change
+// process and alert on /var/run/reboot-required instead. Set to "true" (with
+// Automatic-Reboot-Time) only for hosts that may reboot unattended.
+Unattended-Upgrade::Automatic-Reboot "false";
+
+// Old kernels fill /boot, and a full /boot makes the NEXT kernel update fail.
+Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
+
+// Apply in small steps so a shutdown mid-run leaves a consistent system.
+Unattended-Upgrade::MinimalSteps "true";
+
+// Log to syslog/journal as well as /var/log/unattended-upgrades/.
+Unattended-Upgrade::SyslogEnable "true";
+
+// Never hold up a run on a package that is being held by an operator.
+Unattended-Upgrade::Package-Blacklist {
+};

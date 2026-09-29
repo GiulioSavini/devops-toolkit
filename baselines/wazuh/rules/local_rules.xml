@@ -1,0 +1,184 @@
+<!--
+  Custom rules. Install as /var/ossec/etc/rules/local_rules.xml on the MANAGER.
+  Every rule here is proven to fire — and proven NOT to fire on a benign line —
+  by tests/wazuh.sh, which runs them through the real wazuh-logtest-legacy.
+
+  Conventions that matter:
+    * IDs 100000-120000 are the range reserved for local rules. Reusing a
+      built-in ID silently replaces that rule for the whole installation.
+    * <if_sid> builds on a built-in rule, so the decoding work is already done
+      and the rule only expresses the local policy. A rule written from scratch
+      with its own <match> duplicates upstream and rots on the next update.
+    * Levels are the routing decision, not a severity opinion: 0-3 is noise
+      worth storing, 5-7 is "look at it in the morning", 10-12 is "a human now",
+      12+ should be rare enough that nobody learns to ignore it. Integrations
+      and active response key off the level, so inflating one is how an alert
+      ends up paging at 03:00 forever.
+    * <frequency> rules need <timeframe> AND a <same_*> field, or they correlate
+      unrelated events from different sources into one alert.
+    * Static and dynamic fields are matched differently, and getting it wrong
+      stops analysisd loading the WHOLE file, which takes the entire local
+      ruleset with it. `<field name="dstuser">` fails with "Field 'dstuser' is
+      static"; `<dstuser>` and `<srcuser>` fail with "Invalid option". The
+      element a rule actually has is `<user>`, and it resolves to whichever user
+      field the decoder filled — for a sudo event that is the TARGET user, not
+      the invoking one. Dynamic fields, such as the FIM events' `file`, are the
+      ones that take `<field name="...">`. All of this was established by running
+      the rules through wazuh-analysisd -t, not from the documentation.
+-->
+<group name="local,syslog,">
+
+  <!--
+    Interactive root login over SSH. Built-in 5715 is "sshd: authentication
+    success"; this says the local policy is that root never logs in directly,
+    so every occurrence is an incident even when the key is legitimate.
+  -->
+  <rule id="100010" level="12">
+    <if_sid>5715</if_sid>
+    <user>^root$</user>
+    <description>Policy violation: direct root login over SSH from $(srcip)</description>
+    <mitre>
+      <id>T1078.003</id>
+    </mitre>
+    <group>authentication_success,pci_dss_10.2.5,gdpr_IV_32.2,</group>
+  </rule>
+
+  <!--
+    An unauthorised sudo attempt. Built-in 5405 ("Unauthorized user attempted to
+    use sudo") is level 5, which is a line in a report; locally it is a level 12,
+    because a user who is not in sudoers trying to become root is either an
+    intrusion or a misconfiguration that has been hiding.
+
+    Note what this rule is NOT: an allow list of accounts permitted to use sudo.
+    Expressing that needs a CDB list, because a rule cannot match on the
+    `srcuser` field at all — see the field note above — and `<user>` resolves to
+    the TARGET user (root) for a sudo event, not the invoking one.
+  -->
+  <rule id="100011" level="12">
+    <if_sid>5405</if_sid>
+    <description>Unauthorised sudo attempt by $(srcuser) — not in sudoers</description>
+    <mitre>
+      <id>T1548.003</id>
+    </mitre>
+    <group>privilege_escalation,pci_dss_10.2.2,</group>
+  </rule>
+
+  <!--
+    Failed authentication in the example application, via the custom decoder.
+    Level 5 on its own: a single failure is not news.
+  -->
+  <rule id="100020" level="5">
+    <decoded_as>exampleapp</decoded_as>
+    <status>^fail$</status>
+    <description>exampleapp: authentication failed for $(srcuser) from $(srcip)</description>
+    <group>authentication_failed,</group>
+  </rule>
+
+  <!--
+    The same failure repeated. <same_srcip> is what makes this "one source
+    trying many times" rather than "the internet had a bad minute"; without it,
+    five unrelated users fat-fingering their password become a brute-force
+    alert. This rule is NOT exercised by tests/wazuh.sh: logtest evaluates one
+    event at a time and cannot build correlation state, which is a documented
+    gap rather than a silent one.
+  -->
+  <rule id="100021" level="10" frequency="5" timeframe="120">
+    <if_matched_sid>100020</if_matched_sid>
+    <same_srcip />
+    <description>exampleapp: possible brute force — 5 failed logins from $(srcip) in 120s</description>
+    <mitre>
+      <id>T1110</id>
+    </mitre>
+    <group>authentication_failures,</group>
+  </rule>
+
+  <!--
+    A privilege grant inside the application. An authorisation change is the
+    event an investigation asks about afterwards, and applications almost never
+    alert on it themselves.
+  -->
+  <rule id="100030" level="10">
+    <decoded_as>exampleapp</decoded_as>
+    <!--
+      Only extra_data is matched. A second condition on <user> looked like a
+      free tightening and silently stopped the rule matching at all: in Wazuh's
+      own regex syntax `\.` is not a literal dot, so `\.+` does not mean "any
+      non-empty value". A condition that is not exercised by a test is a
+      condition that can quietly disable the rule it was meant to narrow.
+    -->
+    <extra_data>^admin$</extra_data>
+    <description>exampleapp: admin role granted to $(dstuser) by $(srcuser)</description>
+    <mitre>
+      <id>T1098</id>
+    </mitre>
+    <group>account_changed,pci_dss_10.2.5,</group>
+  </rule>
+
+</group>
+
+<group name="local,syscheck,">
+
+  <!--
+    File integrity monitoring on the paths that decide who has root. Built-in
+    550 is "integrity checksum changed" and 554 is "file added"; scoping them to
+    these paths is the difference between an alert and a daily digest of
+    /var/log churn.
+
+    The <field name="file"> form works on the FIM event's own fields, which is
+    why these rules do not need a decoder of their own.
+  -->
+  <rule id="100040" level="12">
+    <if_group>syscheck</if_group>
+    <field name="file">^/etc/sudoers|^/etc/sudoers\.d/</field>
+    <description>sudoers changed: $(file) — who can become root has changed</description>
+    <mitre>
+      <id>T1098</id>
+    </mitre>
+    <group>configuration_changed,pci_dss_10.5.5,</group>
+  </rule>
+
+  <rule id="100041" level="12">
+    <if_group>syscheck</if_group>
+    <field name="file">^/etc/ssh/sshd_config|^/etc/ssh/sshd_config\.d/|^/root/\.ssh/|/\.ssh/authorized_keys$</field>
+    <description>SSH access configuration or an authorized_keys file changed: $(file)</description>
+    <mitre>
+      <id>T1098.004</id>
+    </mitre>
+    <group>configuration_changed,pci_dss_10.5.5,</group>
+  </rule>
+
+  <!--
+    A new or changed binary in a directory that should only change when a
+    package does. Paired with the agent's whodata configuration, the alert
+    carries the uid and the process that made the change, which is the
+    difference between "something changed" and "this happened".
+  -->
+  <rule id="100042" level="10">
+    <if_group>syscheck</if_group>
+    <field name="file">^/usr/local/bin/|^/usr/local/sbin/|^/opt/</field>
+    <description>Binary changed outside package management: $(file)</description>
+    <mitre>
+      <id>T1543</id>
+    </mitre>
+    <group>configuration_changed,</group>
+  </rule>
+
+</group>
+
+<group name="local,wazuh,">
+
+  <!--
+    The agent going quiet is itself the alert. Built-in 503 is "agent started",
+    505 is "agent disconnected"; an attacker who stops the agent produces
+    silence, and silence is what a monitoring system is worst at noticing.
+  -->
+  <rule id="100050" level="12">
+    <if_sid>505</if_sid>
+    <description>Wazuh agent disconnected: $(agent) — treat as tampering until proven otherwise</description>
+    <mitre>
+      <id>T1562.001</id>
+    </mitre>
+    <group>agent_down,</group>
+  </rule>
+
+</group>

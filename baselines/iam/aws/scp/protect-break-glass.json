@@ -1,0 +1,64 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "OnlyIdentityAdminMayChangeTheBreakGlassRole",
+      "Effect": "Deny",
+      "Action": [
+        "iam:AttachRolePolicy",
+        "iam:DeleteRole",
+        "iam:DeleteRolePermissionsBoundary",
+        "iam:DeleteRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:PutRolePermissionsBoundary",
+        "iam:PutRolePolicy",
+        "iam:TagRole",
+        "iam:UntagRole",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:UpdateRole"
+      ],
+      "Resource": "arn:aws:iam::*:role/OrgBreakGlass",
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalArn": "arn:aws:iam::*:role/OrgIdentityAdmin"
+        }
+      }
+    },
+    {
+      "Sid": "ProtectTheBreakGlassDetection",
+      "Effect": "Deny",
+      "Action": [
+        "events:DeleteRule",
+        "events:DisableRule",
+        "events:PutRule",
+        "events:RemoveTargets",
+        "events:PutTargets"
+      ],
+      "Resource": "arn:aws:events:*:*:rule/break-glass-*",
+      "Condition": {
+        "ArnNotLike": {
+          "aws:PrincipalArn": [
+            "arn:aws:iam::*:role/OrgSecurityAdmin",
+            "arn:aws:iam::*:role/AWSControlTowerExecution"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "BreakGlassMayNotCreatePersistentCredentials",
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreateAccessKey",
+        "iam:CreateLoginProfile",
+        "iam:CreateUser",
+        "iam:UpdateLoginProfile"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "ArnLike": {
+          "aws:PrincipalArn": "arn:aws:iam::*:role/OrgBreakGlass"
+        }
+      }
+    }
+  ]
+}

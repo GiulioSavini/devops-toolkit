@@ -1,0 +1,13 @@
+# Weekly, offset from the backup timer so a drill never races the job that
+# writes to the same repository.
+[Unit]
+Description=Weekly restic restore verification
+
+[Timer]
+OnCalendar=Sun 04:00
+Persistent=true
+RandomizedDelaySec=30m
+Unit=restic-verify.service
+
+[Install]
+WantedBy=timers.target

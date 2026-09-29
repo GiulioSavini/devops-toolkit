@@ -1,0 +1,63 @@
+## Install as /etc/audit/rules.d/30-hardening.rules, load with `augenrules --load`.
+## Architecture-neutral: only syscalls that exist on both x86_64 and aarch64.
+## On x86_64 ALSO install 31-hardening-x86_64.rules (legacy syscalls + 32-bit ABI).
+##
+## auid>=1000 matches human logins (UID_MIN in /etc/login.defs is 1000 on all
+## supported distros); auid!=unset excludes daemons that never logged in.
+## Keys (-k) are what you search on: `ausearch -k identity -i`.
+
+## Changes to time
+-a always,exit -F arch=b64 -S adjtimex,settimeofday,clock_settime -k time-change
+-w /etc/localtime -p wa -k time-change
+
+## Accounts and groups
+-w /etc/passwd -p wa -k identity
+-w /etc/group -p wa -k identity
+-w /etc/shadow -p wa -k identity
+-w /etc/gshadow -p wa -k identity
+-w /etc/security/opasswd -p wa -k identity
+
+## Hostname, network identity, login banners
+-a always,exit -F arch=b64 -S sethostname,setdomainname -k system-locale
+-w /etc/hosts -p wa -k system-locale
+-w /etc/hostname -p wa -k system-locale
+-w /etc/issue -p wa -k system-locale
+-w /etc/issue.net -p wa -k system-locale
+
+## Mandatory access control policy (only one of the two exists per distro)
+-w /etc/apparmor.d/ -p wa -k MAC-policy
+-w /etc/selinux/ -p wa -k MAC-policy
+
+## Privilege configuration and use
+-w /etc/sudoers -p wa -k scope
+-w /etc/sudoers.d/ -p wa -k scope
+-w /var/log/sudo.log -p wa -k sudo-log
+## Commands run as another user (sudo, su, setuid binaries)
+-a always,exit -F arch=b64 -C euid!=uid -F auid!=unset -S execve -k user-emulation
+
+## sshd configuration
+-w /etc/ssh/sshd_config -p wa -k sshd-config
+-w /etc/ssh/sshd_config.d/ -p wa -k sshd-config
+
+## Login records
+-w /var/log/lastlog -p wa -k logins
+-w /var/run/faillock/ -p wa -k logins
+-w /var/run/utmp -p wa -k session
+-w /var/log/wtmp -p wa -k session
+-w /var/log/btmp -p wa -k session
+
+## Permission and ownership changes by users
+-a always,exit -F arch=b64 -S fchmod,fchmodat -F auid>=1000 -F auid!=unset -k perm-mod
+-a always,exit -F arch=b64 -S fchown,fchownat -F auid>=1000 -F auid!=unset -k perm-mod
+-a always,exit -F arch=b64 -S setxattr,lsetxattr,fsetxattr,removexattr,lremovexattr,fremovexattr -F auid>=1000 -F auid!=unset -k perm-mod
+
+## Denied file access by users (someone probing)
+-a always,exit -F arch=b64 -S openat,truncate,ftruncate,open_by_handle_at -F exit=-EACCES -F auid>=1000 -F auid!=unset -k access
+-a always,exit -F arch=b64 -S openat,truncate,ftruncate,open_by_handle_at -F exit=-EPERM -F auid>=1000 -F auid!=unset -k access
+
+## Mounts and deletions by users
+-a always,exit -F arch=b64 -S mount,umount2 -F auid>=1000 -F auid!=unset -k mounts
+-a always,exit -F arch=b64 -S unlinkat,renameat -F auid>=1000 -F auid!=unset -k delete
+
+## Kernel modules (loading a module is loading code into ring 0)
+-a always,exit -F arch=b64 -S init_module,finit_module,delete_module -k modules

@@ -1,0 +1,71 @@
+<!--
+  Manager-side settings, to merge into /var/ossec/etc/ossec.conf inside the
+  existing <ossec_config> element. Kept as a fragment on purpose: ossec.conf
+  ships with a working configuration per platform, and replacing it wholesale is
+  how a manager loses its cluster, its API or its indexer connection.
+
+  Not a standalone XML document either — see the note in agent.conf.
+-->
+<ossec_config>
+
+  <global>
+    <!--
+      The level at which an alert is stored, and the level at which it is sent
+      onward. email_alert_level above alert_level is the whole point: everything
+      from 3 up is queryable afterwards, only 12 and above interrupts a human.
+      Set these two equal and you have either an unsearchable history or a team
+      that filters the alert mailbox into a folder nobody opens.
+    -->
+    <alerts_log>yes</alerts_log>
+    <jsonout_output>yes</jsonout_output>
+    <logall>no</logall>
+    <!--
+      logall_json stores EVERY event, alert or not. It is the difference between
+      "we can answer that question" and "we have 400 GB/day". Turn it on
+      deliberately, with retention, or leave it off.
+    -->
+    <logall_json>no</logall_json>
+    <email_notification>no</email_notification>
+  </global>
+
+  <alerts>
+    <log_alert_level>3</log_alert_level>
+    <email_alert_level>12</email_alert_level>
+  </alerts>
+
+  <!--
+    Vulnerability detection correlates the syscollector inventory with the feeds.
+    It runs on the manager, so it costs nothing on the agents, and it is the
+    control that answers "which of our hosts is affected" without an agent-side
+    scanner.
+  -->
+  <vulnerability-detection>
+    <enabled>yes</enabled>
+    <index-status>yes</index-status>
+    <feed-update-interval>60m</feed-update-interval>
+  </vulnerability-detection>
+
+  <!--
+    Where the custom rules and decoders come from. A file listed here that does
+    not exist stops analysisd from starting — which `wazuh-analysisd -t` is for,
+    and which tests/wazuh.sh proves by removing one.
+  -->
+  <ruleset>
+    <decoder_dir>etc/decoders</decoder_dir>
+    <rule_dir>etc/rules</rule_dir>
+    <list>etc/lists/audit-keys</list>
+  </ruleset>
+
+  <!--
+    Rule testing over the API, for the people who write rules. It runs in its own
+    process with a timeout, so a runaway regular expression cannot take analysisd
+    with it.
+  -->
+  <rule_test>
+    <enabled>yes</enabled>
+    <threads>1</threads>
+    <max_sessions>64</max_sessions>
+    <session_timeout>15m</session_timeout>
+  </rule_test>
+
+</ossec_config>

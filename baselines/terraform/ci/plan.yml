@@ -1,0 +1,145 @@
+### Terraform plan review on pull requests — the review gate, not the apply.
+###
+### Shape of the thing: a pull request gets a *read-only* plan produced by a
+### role that cannot change anything, posted where reviewers read it. Apply
+### happens from a different workflow, on the default branch, with a different
+### role, behind an environment approval. Those two roles must not be the same
+### role; if they are, every fork PR author is one template-injection away from
+### your production account.
+###
+### Copy to .github/workflows/terraform-plan.yml and adjust paths/roles.
+name: Terraform plan
+
+on:
+  pull_request:
+    paths:
+      - "baselines/terraform/**"
+      - ".github/workflows/terraform-plan.yml"
+
+permissions: {}
+
+concurrency:
+  group: tf-plan-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TF_ROOT: baselines/terraform/example/root
+  TF_IN_AUTOMATION: "true"
+  # No colour codes in the output that gets posted into a PR comment.
+  TF_CLI_ARGS: "-no-color"
+
+jobs:
+  plan:
+    name: Plan
+    # A fork PR must never reach the cloud credentials. `pull_request` already
+    # withholds secrets from forks, but the OIDC id-token is not a secret —
+    # this guard is what keeps a fork from minting one.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write # exchange the GitHub OIDC token for AWS credentials
+      pull-requests: write # post the plan as a comment
+    steps:
+      - name: Checkout
+        # actions/checkout@v6.1.0
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+
+      - name: Configure AWS credentials (OIDC, no stored keys)
+        # aws-actions/configure-aws-credentials@v5.1.0
+        uses: aws-actions/configure-aws-credentials@00943011d9042930efac3dcd3a170e4273319bc8
+        with:
+          # A role whose trust policy names this repo AND this ref, and whose
+          # permission policy is read-only (plus write access to the state
+          # object and its .tflock). See baselines/iam/terraform/aws-github-oidc.
+          role-to-assume: arn:aws:iam::111122223333:role/gha-terraform-plan
+          aws-region: eu-west-1
+          role-duration-seconds: 900
+
+      - name: Setup Terraform
+        # hashicorp/setup-terraform@v3.1.2
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
+        with:
+          terraform_version: 1.16.4
+          # The wrapper rewrites stdout, which breaks `-detailed-exitcode`
+          # handling and any parsing of the plan output.
+          terraform_wrapper: false
+
+      - name: Format check
+        run: terraform fmt -check -recursive -diff
+
+      - name: Init
+        working-directory: ${{ env.TF_ROOT }}
+        # `-lockfile=readonly` fails the build if a provider in
+        # .terraform.lock.hcl is missing, changed, or lacks a hash for this
+        # platform, instead of quietly updating the lock file in CI. That is
+        # the difference between "pinned" and "pinned until something bumps it".
+        run: terraform init -input=false -lockfile=readonly
+
+      - name: Validate
+        working-directory: ${{ env.TF_ROOT }}
+        run: terraform validate
+
+      - name: Plan
+        id: plan
+        working-directory: ${{ env.TF_ROOT }}
+        # -detailed-exitcode: 0 = no changes, 2 = changes, 1 = error. Without
+        # it a failed plan and an empty plan look identical to later steps.
+        run: |
+          set +e
+          terraform plan -input=false -lock-timeout=5m -out=tfplan
+          code=$?
+          set -e
+          case "$code" in
+            0) echo "changes=false" >>"$GITHUB_OUTPUT" ;;
+            2) echo "changes=true"  >>"$GITHUB_OUTPUT" ;;
+            *) exit "$code" ;;
+          esac
+          terraform show -no-color tfplan > plan.txt
+          terraform show -json tfplan > plan.json
+
+      - name: Policy gate (conftest)
+        working-directory: baselines/terraform
+        # Runs the same rego the repo unit-tests in tests/terraform.sh. Source
+        # HCL is the input here; to gate on *computed* values (an AMI id, a
+        # rendered policy document, a count that resolves at plan time) write
+        # rules against `input.resource_changes[_].change.after` from plan.json
+        # instead — the source parser cannot see any of that.
+        run: |
+          docker run --rm -v "$PWD:/project" -w /project \
+            openpolicyagent/conftest:v0.70.1@sha256:82f23e0e1f3faf2f3798f4b1974676c1aed96b05c6656ec6820435c31867c532 \
+            test -p policy example/modules/app/main.tf
+
+      - name: Upload plan
+        # actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: tfplan
+          # The binary plan and plan.json contain every attribute value in the
+          # diff, secrets included. Short retention, and do not make this a
+          # public-repo artifact anyone can download.
+          path: |
+            ${{ env.TF_ROOT }}/tfplan
+            ${{ env.TF_ROOT }}/plan.json
+          retention-days: 5
+
+      - name: Comment the plan on the PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          CHANGES: ${{ steps.plan.outputs.changes }}
+        working-directory: ${{ env.TF_ROOT }}
+        # The plan text goes to the API from a *file*. Interpolating it into a
+        # shell string (or into `${{ }}`) makes every resource name and tag
+        # value in the diff executable.
+        run: |
+          {
+            echo "### Terraform plan (changes: ${CHANGES})"
+            echo
+            echo '```terraform'
+            # Keep the comment under GitHub's 65536-character body limit.
+            head -c 60000 plan.txt
+            echo '```'
+          } > comment.md
+          gh pr comment "$PR" --body-file comment.md

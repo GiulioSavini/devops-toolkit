@@ -1,0 +1,104 @@
+# GitLab CI equivalent of baselines/cicd/security.yml. Same tools, same pinned
+# image digests, so the two pipelines cannot silently drift apart.
+# Validated locally with gitlab-ci-local (see tests/cicd.sh): this repo has no
+# GitLab project, so the real CI Lint API is not available to it.
+#
+# GitLab differences worth knowing:
+#   * There is no `permissions:` equivalent. The job token's scope is set on
+#     the project (Settings > CI/CD > Token Access) — narrow it there.
+#   * `artifacts:reports:sast` and `:secret_detection` want GitLab's own report
+#     schemas, not SARIF. Tools that emit both must be told which.
+#   * Protected variables are the fork-PR boundary: pipelines for merge
+#     requests from forks do not get them unless you explicitly opt in, which
+#     is GitLab's analogue of the pull_request_target problem.
+
+stages:
+  - secret-scan
+  - sast
+  - scan
+  - sbom
+  - sign
+
+variables:
+  FAIL_ON_SEVERITY: "CRITICAL,HIGH"
+  GIT_DEPTH: "0" # gitleaks scans history; a shallow clone hides deleted secrets
+
+default:
+  interruptible: true
+  timeout: 30m
+
+secret-scan:
+  stage: secret-scan
+  image:
+    name: zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+    entrypoint: [""]
+  script:
+    # `gitleaks git <path>` scans commit history; `gitleaks dir <path>` scans
+    # the working tree. The old `gitleaks detect --source=.` spelling was
+    # removed in gitleaks v8 and now fails with "unknown command".
+    - gitleaks git . --no-banner --redact --exit-code 1 --report-format sarif --report-path gitleaks.sarif
+  artifacts:
+    when: always
+    paths: [gitleaks.sarif]
+    expire_in: 14 days
+
+sast:
+  stage: sast
+  image:
+    name: semgrep/semgrep:1.178.0@sha256:32e459968daabe7ab86968184a29109b9564aa00392401156f9788452b42786b
+    entrypoint: [""]
+  script:
+    # returntocorp/semgrep-action and semgrep/semgrep-action are both archived.
+    # Run the CLI from the image: `semgrep ci` in a pipeline, `semgrep scan`
+    # for a full ad-hoc scan.
+    - semgrep ci --config=auto --gitlab-sast --gitlab-sast-output=gl-sast-report.json
+  artifacts:
+    when: always
+    reports:
+      sast: gl-sast-report.json
+
+dependency-iac-scan:
+  stage: scan
+  image:
+    name: aquasec/trivy:0.74.0@sha256:62b1e65e8869bc4b4c6aa4fa2b21595256c7c2f6018a9d9ad61caf87187c1969
+    entrypoint: [""]
+  script:
+    - trivy fs --scanners vuln,misconfig,secret --format sarif --output trivy.sarif --severity "$FAIL_ON_SEVERITY" --exit-code 1 .
+  artifacts:
+    when: always
+    paths: [trivy.sarif]
+
+sbom:
+  stage: sbom
+  image:
+    name: anchore/syft:v1.52.0@sha256:500e2d872ac019436926e8322b4fc1f39441d94d21f6f4046c6ff29b30e8cb02
+    entrypoint: [""]
+  rules:
+    - if: '$IMAGE_REF'
+  script:
+    - syft "$IMAGE_REF" -o cyclonedx-json > sbom.cdx.json
+  artifacts:
+    paths: [sbom.cdx.json]
+    expire_in: 90 days
+
+sign:
+  stage: sign
+  image:
+    name: ghcr.io/sigstore/cosign/cosign:v3.1.3@sha256:9e5c2f2edc34351160407ca3416c61855bdf9403c3c5936e0f0be7fc261611b8
+    entrypoint: [""]
+  id_tokens:
+    SIGSTORE_ID_TOKEN:
+      aud: sigstore
+  rules:
+    - if: '$IMAGE_REF'
+  needs: ["sbom"]
+  script:
+    # GitLab's OIDC id_token feeds Fulcio exactly as GitHub's
+    # ACTIONS_ID_TOKEN_REQUEST_* does: no long-lived signing key anywhere.
+    - cosign sign --yes "$IMAGE_REF"
+    - cosign attest --yes --type cyclonedx --predicate sbom.cdx.json "$IMAGE_REF"
+    # Then verify, as the GitHub workflow's last step does. The certificate
+    # identity GitLab produces is issuer $CI_SERVER_URL with a subject built
+    # from the project path and the ref — print it once with
+    # `cosign verify --certificate-identity-regexp '.*' ... -o text` and pin
+    # the exact string per environment rather than copying a guess from here.

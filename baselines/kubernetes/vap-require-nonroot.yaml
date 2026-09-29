@@ -1,0 +1,72 @@
+# Second worked ValidatingAdmissionPolicy: require runAsNonRoot: true, either
+# once at Pod level or on every container.
+#
+# This overlaps with the restricted Pod Security Standard, which already
+# requires this and much more (see namespace-pss-restricted.yaml). It is here
+# for the namespaces that cannot run under full restricted yet — the ones with
+# a workload that still needs a host mount or a capability — but should get
+# this one guarantee today, and as a second CEL example next to the :latest
+# policy.
+#
+# Do not bind both this and restricted PSS to the same namespace: two controls
+# rejecting the same request only makes the error message harder to read. The
+# binding below therefore selects namespaces labelled `enforce: baseline`.
+#
+# Related, if you find yourself wanting to *fix* pods instead of rejecting
+# them: MutatingAdmissionPolicy (CEL-based, in-process, GA since v1.36) is the
+# mutating counterpart. Prefer rejecting — a mutation that silently changes
+# what a team deployed is a debugging problem for someone else next quarter.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: require-run-as-nonroot.example.com
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["pods"]
+  validations:
+    # Pod-level setting applies to every container that does not override it,
+    # so either the pod sets it, or every container does. has() guards are
+    # required: securityContext and runAsNonRoot are both optional fields, and
+    # reading an absent field in CEL is an error, which failurePolicy: Fail
+    # turns into a rejected request with an unhelpful message.
+    - expression: >-
+        (has(object.spec.securityContext) &&
+         has(object.spec.securityContext.runAsNonRoot) &&
+         object.spec.securityContext.runAsNonRoot == true)
+        ||
+        object.spec.containers.all(c,
+          has(c.securityContext) &&
+          has(c.securityContext.runAsNonRoot) &&
+          c.securityContext.runAsNonRoot == true)
+      message: "pod securityContext.runAsNonRoot must be true, or every container must set it"
+    # Init containers run first and with the same access to volumes; a root
+    # init container that chowns a host path has already done the damage by the
+    # time the non-root main container starts.
+    - expression: >-
+        (has(object.spec.securityContext) &&
+         has(object.spec.securityContext.runAsNonRoot) &&
+         object.spec.securityContext.runAsNonRoot == true)
+        ||
+        !has(object.spec.initContainers) ||
+        object.spec.initContainers.all(c,
+          has(c.securityContext) &&
+          has(c.securityContext.runAsNonRoot) &&
+          c.securityContext.runAsNonRoot == true)
+      message: "pod securityContext.runAsNonRoot must be true, or every init container must set it"
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: require-run-as-nonroot-baseline-namespaces.example.com
+spec:
+  policyName: require-run-as-nonroot.example.com
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        pod-security.kubernetes.io/enforce: baseline

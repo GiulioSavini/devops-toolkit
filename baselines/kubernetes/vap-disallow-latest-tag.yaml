@@ -1,0 +1,102 @@
+# ValidatingAdmissionPolicy (GA since v1.30): declarative, in-process admission
+# checks written in CEL, evaluated by the API server itself — no webhook pod to
+# deploy, keep available, and explain during a control-plane incident. A failing
+# webhook with failurePolicy: Fail takes the cluster's write path down with it;
+# a failing CEL expression cannot.
+#
+# Both objects below are required: the policy alone does nothing until a binding
+# scopes it. tests/kubernetes-e2e.sh proves the pair works by creating a Pod
+# with a :latest image (must be rejected) and the same Pod with a pinned tag
+# (must be admitted) — and, before applying the policy, that the :latest Pod is
+# admitted, so the assertion is known to be capable of failing.
+#
+# Why a tag policy at all: :latest is not a version, it is "whatever was pushed
+# last". It makes the running image unknowable after the fact (two replicas of
+# the same Deployment can be running different code), makes rollback impossible,
+# and turns any registry compromise into an immediate cluster compromise on the
+# next restart. imagePullPolicy defaults to Always for :latest, so a restarted
+# pod silently picks up whatever is there now.
+#
+# What the expressions accept:
+#   registry.example.com/team/app:v1.4.2          ok (explicit tag)
+#   registry.example.com:5000/team/app:v1.4.2     ok (tag after the last slash)
+#   app@sha256:abc...                             ok (digest: strongest)
+#   registry.example.com:5000/team/app            rejected (no tag, port colon)
+#   app:latest                                    rejected
+#   app                                           rejected (implicitly :latest)
+#
+# The colon test deliberately looks only at the part AFTER the last slash,
+# because a registry host can contain a port, which is the case a naive
+# `image.contains(':')` gets wrong — it accepts "myregistry:5000/app", which
+# has no tag and therefore resolves to :latest. lastIndexOf returns -1 when
+# there is no slash, so substring(0) leaves a bare "app:v1" intact.
+# (charAt/indexOf/lastIndexOf/substring come from the CEL extended strings
+# library, available in every Kubernetes version that has CEL.)
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: disallow-latest-tag.example.com
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        # pods/ephemeralcontainers is a separate subresource: without it,
+        # `kubectl debug` can attach an unpinned image to a running pod and
+        # this policy never sees the request.
+        resources: ["pods", "pods/ephemeralcontainers"]
+  validations:
+    - expression: >-
+        object.spec.containers.all(c,
+          c.image.contains('@sha256:') ||
+          (c.image.substring(c.image.lastIndexOf('/') + 1).contains(':') &&
+           !c.image.endsWith(':latest')))
+      message: "every container image must use an explicit non-'latest' tag or an @sha256 digest"
+    - expression: >-
+        !has(object.spec.initContainers) ||
+        object.spec.initContainers.all(c,
+          c.image.contains('@sha256:') ||
+          (c.image.substring(c.image.lastIndexOf('/') + 1).contains(':') &&
+           !c.image.endsWith(':latest')))
+      message: "every init container image must use an explicit non-'latest' tag or an @sha256 digest"
+    - expression: >-
+        !has(object.spec.ephemeralContainers) ||
+        object.spec.ephemeralContainers.all(c,
+          c.image.contains('@sha256:') ||
+          (c.image.substring(c.image.lastIndexOf('/') + 1).contains(':') &&
+           !c.image.endsWith(':latest')))
+      message: "every ephemeral (debug) container image must use an explicit non-'latest' tag or an @sha256 digest"
+---
+# The binding is where scope lives. Matching on the Pod Security label means
+# "every namespace we already consider production-grade", so a new namespace
+# gets the policy by being labelled restricted rather than by someone
+# remembering to edit this file.
+#
+# Rollout order that does not break anything: create the policy and a binding
+# with validationActions: [Warn, Audit] first, watch the audit annotation
+# validation.policy.admission.k8s.io/validation_failure for a week to find the
+# workloads that would break, then switch to [Deny]. Deny and Warn cannot be
+# combined.
+#
+# Deployments are matched indirectly: a Deployment with a :latest image is
+# accepted by the API server, and it is the ReplicaSet controller's Pod
+# creation that gets rejected. So `kubectl apply` succeeds and the Deployment
+# sits at 0 available with the message in the ReplicaSet's events. If you want
+# the error on the developer's terminal instead, add a second policy that
+# matches apps/v1 deployments and reads object.spec.template.spec.containers —
+# and keep this Pod-level one, because it is the one that actually closes the
+# hole (bare pods, Jobs, CronJobs, StatefulSets, other controllers, kubectl
+# debug).
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: disallow-latest-tag-restricted-namespaces.example.com
+spec:
+  policyName: disallow-latest-tag.example.com
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchLabels:
+        pod-security.kubernetes.io/enforce: restricted

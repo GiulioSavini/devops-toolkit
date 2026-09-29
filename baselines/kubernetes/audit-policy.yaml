@@ -1,0 +1,128 @@
+# kube-apiserver audit policy: --audit-policy-file=/etc/kubernetes/audit-policy.yaml
+# plus --audit-log-path=/var/log/kubernetes/audit/audit.log (log backend), or a
+# webhook backend for shipping straight to a SIEM.
+#
+# Rules are evaluated in order and the FIRST match wins, so the specific
+# "log this loudly" and "never log that" rules must come before the catch-all.
+# A policy with zero rules is rejected by the API server at startup.
+#
+# The levels, cheapest to most expensive: None, Metadata (who/what/when),
+# Request (adds the request body), RequestResponse (adds the response body).
+#
+# The single most important thing to get right in an audit policy is to not
+# turn it into a secret store. A RequestResponse rule on Secrets writes every
+# Secret's contents into the audit log in plain text, and audit logs are
+# shipped off-cluster, indexed, retained for a year and readable by everyone in
+# the SRE group — i.e. exactly the opposite of encrypting etcd at rest. Same
+# for serviceaccounts/token, whose RESPONSE is a usable bearer token. So:
+# metadata for Secrets, request-only for token minting, and use volume rather
+# than content to spot an attacker enumerating them.
+apiVersion: audit.k8s.io/v1
+kind: Policy
+omitStages:
+  - "RequestReceived"
+rules:
+  # --- Never log these: the response body IS the credential ---
+  # Metadata still records who called it, when, from which IP and with which
+  # user agent, which is what you actually alert on: "this ServiceAccount
+  # listed every Secret in the cluster at 03:00".
+  - level: Metadata
+    resources:
+      - group: ""
+        resources: ["secrets"]
+
+  # create on serviceaccounts/token mints a bearer token for that
+  # ServiceAccount. The request (audience, expiry, bound object) is worth
+  # keeping; the response contains the token itself, so never RequestResponse.
+  - level: Request
+    resources:
+      - group: ""
+        resources: ["serviceaccounts/token"]
+
+  # --- Privilege-escalation-relevant verbs: full request and response ---
+  # These are the verbs the upstream RBAC good-practices guide calls out as
+  # ways to gain privilege beyond what a role was meant to grant: escalate and
+  # bind sidestep the "you cannot grant rights you do not hold" check, and
+  # impersonate lets a principal act as another user, group or ServiceAccount.
+  - level: RequestResponse
+    verbs: ["impersonate", "escalate", "bind"]
+
+  # pods/exec, attach and portforward are how an attacker gets a shell in a
+  # running container; nodes/proxy is direct kubelet API access, which reaches
+  # exec on every pod on that node while bypassing admission control. The
+  # request body carries the command that was run — that is the part you want.
+  # (The response is an upgraded stream, so it does not end up in the log.)
+  - level: RequestResponse
+    resources:
+      - group: ""
+        resources: ["pods/exec", "pods/attach", "pods/portforward"]
+      - group: ""
+        resources: ["nodes/proxy"]
+
+  # Anyone who can write an admission webhook configuration sees — and, if it
+  # is a mutating one, can rewrite — every object admitted afterwards. The same
+  # applies to the in-process policy objects.
+  - level: RequestResponse
+    resources:
+      - group: "admissionregistration.k8s.io"
+        resources:
+          - "validatingwebhookconfigurations"
+          - "mutatingwebhookconfigurations"
+          - "validatingadmissionpolicies"
+          - "validatingadmissionpolicybindings"
+          - "mutatingadmissionpolicies"
+          - "mutatingadmissionpolicybindings"
+
+  # Approving a CSR for the kubernetes.io/kube-apiserver-client signer mints a
+  # client certificate with whatever subject was asked for, including names
+  # that duplicate system components.
+  - level: RequestResponse
+    resources:
+      - group: "certificates.k8s.io"
+        resources: ["certificatesigningrequests", "certificatesigningrequests/approval"]
+
+  # RBAC changes are the audit trail for "how did this account get this right".
+  - level: RequestResponse
+    resources:
+      - group: "rbac.authorization.k8s.io"
+        resources: ["roles", "clusterroles", "rolebindings", "clusterrolebindings"]
+
+  # --- Routine noise, logged cheaply or not at all ---
+  - level: None
+    resources:
+      - group: ""
+        resources: ["events"]
+
+  - level: None
+    users: ["system:kube-proxy"]
+    verbs: ["watch"]
+    resources:
+      - group: ""
+        resources: ["endpoints", "services"]
+
+  - level: None
+    userGroups: ["system:authenticated", "system:unauthenticated"]
+    nonResourceURLs:
+      - "/healthz*"
+      - "/livez*"
+      - "/readyz*"
+      - "/version"
+      - "/api*"
+
+  # ConfigMaps are not secrets, but people keep putting secrets in them, and a
+  # ConfigMap body can be a megabyte of rendered config. Metadata only.
+  - level: Metadata
+    resources:
+      - group: ""
+        resources: ["configmaps"]
+
+  # Everything else in the core and apps API groups: request body, no response
+  # body (cheaper, and the request already shows what was asked for).
+  - level: Request
+    resources:
+      - group: ""
+      - group: "apps"
+
+  # Catch-all: still logged, at the cheapest level, so an API group nobody
+  # anticipated is not silently invisible.
+  - level: Metadata

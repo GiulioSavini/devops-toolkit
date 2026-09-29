@@ -1,0 +1,52 @@
+{
+  "properties": {
+    "displayName": "Deny Azure RBAC role assignments made directly to users",
+    "policyType": "Custom",
+    "mode": "All",
+    "description": "Role assignments must target groups, service principals or managed identities. Direct user assignments bypass group-based access reviews and are left behind when people change teams. Listed principal object IDs (break-glass accounts) are exempt.",
+    "metadata": {
+      "category": "Authorization",
+      "version": "1.0.0"
+    },
+    "parameters": {
+      "effect": {
+        "type": "String",
+        "defaultValue": "Deny",
+        "allowedValues": ["Audit", "Deny", "Disabled"],
+        "metadata": {
+          "displayName": "Effect",
+          "description": "Start with Audit, move to Deny once the compliance report is clean."
+        }
+      },
+      "exemptPrincipalIds": {
+        "type": "Array",
+        "defaultValue": [],
+        "metadata": {
+          "displayName": "Exempt principal object IDs",
+          "description": "Object IDs of users that may still receive direct assignments, e.g. emergency access accounts."
+        }
+      }
+    },
+    "policyRule": {
+      "if": {
+        "allOf": [
+          {
+            "field": "type",
+            "equals": "Microsoft.Authorization/roleAssignments"
+          },
+          {
+            "field": "Microsoft.Authorization/roleAssignments/principalType",
+            "equals": "User"
+          },
+          {
+            "field": "Microsoft.Authorization/roleAssignments/principalId",
+            "notIn": "[parameters('exemptPrincipalIds')]"
+          }
+        ]
+      },
+      "then": {
+        "effect": "[parameters('effect')]"
+      }
+    }
+  }
+}

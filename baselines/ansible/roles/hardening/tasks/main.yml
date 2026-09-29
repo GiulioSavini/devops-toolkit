@@ -1,0 +1,127 @@
+---
+- name: Fail fast when the admin public key was not supplied
+  ansible.builtin.assert:
+    that:
+      - hardening_admin_pubkey | length > 0
+    fail_msg: >-
+      hardening_admin_pubkey is empty. Pass the key from the inventory or from a
+      sops-encrypted group_vars file - never from a file committed next to the
+      role.
+    quiet: true
+
+- name: Fail fast on an unsupported OS family
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['os_family'] in ['Debian', 'RedHat']
+    fail_msg: >-
+      os_family {{ ansible_facts['os_family'] }} is not supported by this role.
+      The privileged group (sudo vs wheel) and the sudoers path differ per
+      family; guessing is how a play silently grants nothing.
+    quiet: true
+
+- name: Ensure the privileged group exists
+  ansible.builtin.group:
+    name: "{{ hardening_privileged_group }}"
+    state: present
+  become: true
+
+- name: Ensure the admin account exists and is in the privileged group
+  ansible.builtin.user:
+    name: "{{ hardening_admin_user }}"
+    state: present
+    shell: /bin/bash
+    # append: true is not optional. Without it this task *replaces* the
+    # account's supplementary groups, which is how an unrelated role's
+    # membership disappears on the next run.
+    groups: "{{ hardening_privileged_group }}"
+    append: true
+    create_home: true
+  become: true
+
+- name: Install the admin authorized key
+  ansible.posix.authorized_key:
+    user: "{{ hardening_admin_user }}"
+    key: "{{ hardening_admin_pubkey }}"
+    state: present
+    # exclusive removes keys this role did not place. That is the point: it
+    # makes the file converge instead of accumulating whatever anyone appended
+    # by hand.
+    exclusive: true
+    manage_dir: true
+  become: true
+
+- name: Grant the privileged group passwordless sudo
+  community.general.sudoers:
+    name: "10-{{ hardening_privileged_group }}-nopasswd"
+    group: "{{ hardening_privileged_group }}"
+    commands: ALL
+    nopassword: true
+    # validation: required runs `visudo -c` against the file before it is put
+    # in place. Writing an invalid drop-in into /etc/sudoers.d makes sudo
+    # refuse to run at all - on every account, including yours, with no way
+    # back in except the console.
+    validation: required
+    state: present
+  become: true
+
+- name: Apply kernel hardening sysctls
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/99-hardening.conf
+    sysctl_set: true
+    reload: true
+    state: present
+  loop: "{{ hardening_sysctls | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  become: true
+
+- name: Read the effective sshd configuration
+  ansible.builtin.command:
+    cmd: sshd -T
+  # changed_when: false - this reads state, it never changes it, so it must not
+  # colour the run as changed.
+  changed_when: false
+  # check_mode: false - the task is read-only, so it is safe under --check, and
+  # forcing it to run means the assertion below has real output to work with
+  # instead of an empty skipped result. This is the pattern that makes
+  # `--check` a usable dry run rather than a cascade of undefined variables.
+  check_mode: false
+  register: hardening_sshd_effective
+  become: true
+
+- name: Assert sshd does not accept password authentication
+  ansible.builtin.assert:
+    that:
+      - "'passwordauthentication no' in hardening_sshd_effective.stdout | lower"
+    fail_msg: >-
+      sshd still accepts password authentication. See
+      guides/linux-hardening.md for the sshd_config.d drop-in.
+    quiet: true
+
+- name: Ensure the agent configuration directory exists
+  ansible.builtin.file:
+    path: "{{ hardening_agent_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  become: true
+  when: hardening_agent_token | length > 0
+
+- name: Install the monitoring agent token
+  ansible.builtin.copy:
+    content: "{{ hardening_agent_token }}"
+    dest: "{{ hardening_agent_config_dir }}/token"
+    owner: root
+    group: root
+    mode: "0600"
+  # no_log is what stops the token from being printed. `copy` with `content`
+  # echoes the whole value under --diff, and the task result is written to the
+  # callback output and to any log aggregation behind it. no_log: true costs
+  # you the diff for this one task; not setting it costs you the secret.
+  no_log: true
+  become: true
+  when: hardening_agent_token | length > 0
+  notify: Restart monitoring agent

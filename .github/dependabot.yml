@@ -1,0 +1,9 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directories: ["/", "/baselines/cicd"]
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
