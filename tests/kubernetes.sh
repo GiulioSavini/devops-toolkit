@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Static validation of baselines/kubernetes/*: every file that is a real API
-# resource is checked against the actual Kubernetes 1.35 OpenAPI schema
+# resource is checked against the actual Kubernetes 1.37 OpenAPI schema
 # (kubeconform -strict). The three files that are NOT API resources
 # (kubelet, audit, encryption config — nothing the API server exposes a
 # schema for) get their own real check instead of being silently skipped:
