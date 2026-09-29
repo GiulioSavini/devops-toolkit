@@ -90,5 +90,9 @@ jobs:
       - name: lychee
         uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
         with:
-          args: --no-progress --max-concurrency 4 './**/*.md'
+          # The configuration lives in lychee.toml so a local run and this job
+          # behave identically. It documents why 403 and 429 are accepted (a
+          # server refusing a datacentre IP is not a dead link) while 404 and
+          # 410 still fail the build.
+          args: --no-progress --config lychee.toml './**/*.md'
           fail: true

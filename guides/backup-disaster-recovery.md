@@ -422,8 +422,8 @@ cited: verify them against the exact benchmark version you are audited on.
 - [S3 Object Lock](https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lock.html)
   — GOVERNANCE vs COMPLIANCE, and what bypass requires
 - [S3 lifecycle and Object Lock interaction](https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lock-overview.html)
-- [`systemd.exec(5)`](https://www.freedesktop.org/software/systemd/man/systemd.exec.html)
-  and [`systemd.timer(5)`](https://www.freedesktop.org/software/systemd/man/systemd.timer.html)
+- [`systemd.exec(5)`](https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html)
+  and [`systemd.timer(5)`](https://www.freedesktop.org/software/systemd/man/latest/systemd.timer.html)
   for the sandboxing and `Persistent=`
 - [`capabilities(7)`](https://man7.org/linux/man-pages/man7/capabilities.7.html)
   for `CAP_DAC_READ_SEARCH`

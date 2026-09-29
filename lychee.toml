@@ -1,0 +1,44 @@
+# Link checker configuration, used by .github/workflows/docs.yml.
+#
+# The point of this file is to keep the check meaningful. A link checker that
+# fails on anti-bot responses gets disabled within a week, and then nobody
+# notices the links that are genuinely gone — which this one did catch on its
+# first run: three rotted citations (PROTOCOL.certkeys removed from the OpenSSH
+# tree, pwquality.conf(5) never hosted by man7, and amtool's page moved into the
+# Alertmanager README).
+#
+# 404 and 410 still fail the build. What is tolerated below is a server refusing
+# to answer a datacentre IP, which says nothing about whether the page exists.
+
+# Two requests at a time, with retries and a pause between them. The first CI run
+# hit 429 on seven docs.ansible.com and readthedocs.io URLs at concurrency 4:
+# every one of those pages is fine in a browser.
+max_concurrency = 2
+max_retries = 4
+retry_wait_time = 8
+timeout = 30
+
+# No custom user_agent. A browser-like one was tried first and made
+# freedesktop.org answer 418 to every systemd manual page, which is worse than
+# the problem it was meant to solve: lychee's own default is the string those
+# sites are willing to serve.
+
+# 403 and 429 are accepted deliberately: both are "not from this IP, not right
+# now", not "this page is gone". 2xx and 3xx are the normal successes.
+accept = ["200..=299", "403", "429"]
+
+# Sites that block automated requests outright, so checking them only ever
+# produces noise. Each one is a paywalled or bot-walled standards body, and each
+# must be verified by hand when the citation changes.
+exclude = [
+  "^https://www\\.iso\\.org/",
+  "^https://www\\.cisecurity\\.org/",
+]
+
+# Anything that is not a real, resolvable destination.
+exclude_all_private = true
+# Mail links are excluded by default; `include_mail` would turn them on.
+include_mail = false
+# Per-host pacing on top of max_concurrency: this is what actually stops a
+# documentation site from answering 429 to the seventh request in a second.
+host_concurrency = 1
