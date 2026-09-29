@@ -139,8 +139,14 @@ done
 
 # Hash everything, including the order log: the manifest is what makes the set
 # verifiable after it has moved between hands and storage.
-( cd "$case_dir" && find . -type f ! -name manifest.sha256 -print0 \
-    | sort -z | xargs -0 sha256sum > manifest.sha256 )
+#
+# The manifest is built OUTSIDE the case directory and moved in afterwards, so
+# the find never sees a half-written manifest and needs no exclusion for it.
+# Writing it next to the case (on the evidence filesystem) rather than in /tmp
+# keeps everything derived from the evidence off the suspect host's disk.
+manifest_tmp="$outdir/.manifest-$case_id.tmp"
+( cd "$case_dir" && find . -type f -print0 | sort -z | xargs -0 sha256sum ) > "$manifest_tmp"
+mv "$manifest_tmp" "$case_dir/manifest.sha256"
 
 cat > "$case_dir/chain-of-custody.md" <<CUSTODY
 # Chain of custody — $case_id
