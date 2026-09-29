@@ -1,0 +1,20 @@
+# The timer, not the service, is what you enable:
+#   systemctl enable --now restic-backup.timer
+[Unit]
+Description=Daily restic backup
+Documentation=https://restic.readthedocs.io/
+
+[Timer]
+OnCalendar=daily
+# Persistent=true runs the job as soon as possible after a missed window (host
+# off, host rebooting). Without it, a laptop or a host that is down at 00:00
+# simply has no backup for that day and nothing says so.
+Persistent=true
+# Every host in the fleet firing at exactly midnight is a self-inflicted
+# thundering herd on the repository backend and on the network.
+RandomizedDelaySec=1h
+AccuracySec=1m
+Unit=restic-backup.service
+
+[Install]
+WantedBy=timers.target

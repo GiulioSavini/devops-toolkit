@@ -1,0 +1,71 @@
+# Backup as a systemd service, sandboxed. Validated by tests/backup.sh with
+# `systemd-analyze verify`, which catches a misspelled directive — something
+# systemd otherwise reports only in the journal at the moment the unit runs.
+#
+# Install:
+#   /etc/systemd/system/restic-backup.service
+#   /etc/restic/restic.env          (0400 root, from restic.env.example)
+#   /etc/restic/password            (0400 root)
+#   /etc/restic/excludes.txt
+[Unit]
+Description=restic backup
+Documentation=https://restic.readthedocs.io/
+# Do not start a backup before the network and the clock are up: a snapshot
+# timestamped before an NTP correction is a snapshot you cannot order.
+After=network-online.target time-sync.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/restic/restic.env
+ExecStart=/usr/local/bin/restic-backup.sh
+
+# Reading every file on the host needs exactly one capability, not root's whole
+# set. CAP_DAC_READ_SEARCH bypasses read and directory-traverse permission
+# checks; nothing here needs to write outside the cache and the repository.
+AmbientCapabilities=CAP_DAC_READ_SEARCH
+CapabilityBoundingSet=CAP_DAC_READ_SEARCH
+NoNewPrivileges=true
+
+# The filesystem the unit can see. ProtectSystem=strict makes everything
+# read-only except what is listed below, so a compromised backup job cannot
+# modify the host it is reading.
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+# The repository cache must be writable, and it must be persistent: without it
+# every run re-downloads the index, which on a remote repository is most of the
+# runtime and most of the transfer cost.
+CacheDirectory=restic
+Environment=RESTIC_CACHE_DIR=/var/cache/restic
+ReadWritePaths=/var/cache/restic
+
+# A backup that competes with production for IO is a backup that gets disabled.
+Nice=10
+IOSchedulingClass=idle
+IOSchedulingPriority=7
+CPUSchedulingPolicy=batch
+
+# A run that hangs must not block the next one forever, and a repository lock
+# held by a killed run is worse than a missed backup.
+TimeoutStartSec=6h
+KillSignal=SIGINT
+KillMode=mixed
+
+[Install]
+WantedBy=multi-user.target
