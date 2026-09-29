@@ -362,5 +362,111 @@ if printf '#!/bin/sh\nif [ $1 = x ]; then echo y\n' \
 fi
 ok "broken script rejected"
 
+# ---------------------------------------------------------------------------
+# 7. SSH certificates end to end
+# ---------------------------------------------------------------------------
+# 10-user-ca.conf is the drop-in most likely to be shipped wrong, and its worst
+# failure is invisible to `sshd -t`: with RevokedKeys pointing at a file that
+# does not exist, the configuration parses cleanly, sshd starts, and then every
+# public key authentication on the host fails. This runs a real sshd, logs in
+# with a real certificate, and then breaks each piece in turn.
+echo "==> SSH certificates: real login against 00-hardening.conf + 10-user-ca.conf"
+CERT_SCRIPT='
+set -e
+apt-get -qq update >/dev/null 2>&1
+apt-get -qq install -y openssh-server openssh-client >/dev/null 2>&1
+mkdir -p /run/sshd /etc/ssh/auth_principals
+ssh-keygen -A >/dev/null
+
+# CA, host key certificate, and a user certificate with a principal that is
+# NOT the local username - the point of AuthorizedPrincipalsFile.
+ssh-keygen -q -t ed25519 -N "" -f /etc/ssh/user_ca
+# useradd leaves the account locked (no password hash at all), and sshd
+# refuses a locked account before it ever looks at the key. A literal "*" is
+# "no password login", which is not the same thing as locked.
+useradd -m -s /bin/sh -p "*" deploy
+echo team-platform > /etc/ssh/auth_principals/deploy
+ssh-keygen -q -t ed25519 -N "" -f /tmp/alice
+ssh-keygen -q -s /etc/ssh/user_ca -I alice@example.com -n team-platform \
+  -z 1234 -V -5m:+8h -O clear -O permit-pty /tmp/alice.pub
+ssh-keygen -k -f /etc/ssh/revoked_keys >/dev/null
+
+# Host certificate, so 10-user-ca.conf HostCertificate line is exercised too.
+# In production this is signed by a SEPARATE host CA; one CA is used here only
+# to keep the fixture small.
+ssh-keygen -q -s /etc/ssh/user_ca -I testhost -h -n localhost,127.0.0.1 \
+  -V -5m:+52w /etc/ssh/ssh_host_ed25519_key.pub
+
+# Real sshd on a high port, using the baseline drop-ins verbatim.
+cat > /tmp/sshd_config <<EOF
+Include /etc/ssh-under-test/sshd_config.d/*.conf
+Port 2222
+PidFile /tmp/sshd.pid
+HostKey /etc/ssh/ssh_host_ed25519_key
+EOF
+start_sshd() {
+  rm -f /tmp/sshd.log
+  /usr/sbin/sshd -f /tmp/sshd_config -E /tmp/sshd.log
+  sleep 1
+}
+stop_sshd() { [ -f /tmp/sshd.pid ] && kill "$(cat /tmp/sshd.pid)" 2>/dev/null || true; sleep 0.3; }
+try_login() {
+  ssh -p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    -o IdentitiesOnly=yes -i /tmp/alice -o ConnectTimeout=5 \
+    deploy@127.0.0.1 "echo LOGIN_OK" 2>/dev/null
+}
+
+start_sshd
+out="$(try_login || true)"
+[ "$out" = "LOGIN_OK" ] || { echo "certificate login FAILED"; tail -5 /tmp/sshd.log; exit 1; }
+echo "    ok: certificate with principal team-platform logs in as deploy"
+# The login was attributed to the certificate identity, not just to a key.
+grep -q "Accepted publickey for deploy.*ID alice@example.com" /tmp/sshd.log \
+  || { echo "sshd did not log the certificate identity"; grep -i accepted /tmp/sshd.log; exit 1; }
+echo "    ok: sshd logged the certificate identity (LogLevel VERBOSE)"
+stop_sshd
+
+# Control 1: revoke the certificate by serial. Same key, same certificate.
+# Revocation by serial takes a KRL specification file. -z is the flag that
+# SETS a serial when signing; it does not revoke one.
+printf "serial: 1234\n" > /tmp/krl.spec
+ssh-keygen -k -f /etc/ssh/revoked_keys -u -s /etc/ssh/user_ca /tmp/krl.spec >/dev/null
+# ssh-keygen -Q exits NON-zero for a revoked key and prints REVOKED.
+ssh-keygen -Q -f /etc/ssh/revoked_keys /tmp/alice-cert.pub 2>&1 | grep -q REVOKED \
+  || { echo "the KRL does not actually list the certificate as revoked"; exit 1; }
+start_sshd
+out="$(try_login || true)"
+[ "$out" != "LOGIN_OK" ] || { echo "a REVOKED certificate still logged in"; exit 1; }
+echo "    ok: control: revoking serial 1234 in the KRL denies the login"
+stop_sshd
+ssh-keygen -k -f /etc/ssh/revoked_keys >/dev/null   # empty KRL again
+
+# Control 2: the KRL file itself missing. sshd -t says the config is fine.
+mv /etc/ssh/revoked_keys /tmp/krl.bak
+/usr/sbin/sshd -t -f /tmp/sshd_config \
+  || { echo "expected sshd -t to ACCEPT a config with a missing RevokedKeys"; exit 1; }
+echo "    ok: sshd -t accepts a missing RevokedKeys file (it cannot catch this)"
+start_sshd
+out="$(try_login || true)"
+[ "$out" != "LOGIN_OK" ] || { echo "login worked with a missing RevokedKeys file"; exit 1; }
+grep -q "revoked keys file /etc/ssh/revoked_keys: No such file" /tmp/sshd.log \
+  || { echo "expected the missing-KRL error in the log"; tail -5 /tmp/sshd.log; exit 1; }
+echo "    ok: control: a missing RevokedKeys file denies EVERY public key login"
+stop_sshd
+mv /tmp/krl.bak /etc/ssh/revoked_keys
+
+# Control 3: no principal for this user.
+: > /etc/ssh/auth_principals/deploy
+start_sshd
+out="$(try_login || true)"
+[ "$out" != "LOGIN_OK" ] || { echo "login worked with no matching principal"; exit 1; }
+echo "    ok: control: an empty AuthorizedPrincipalsFile denies the certificate"
+stop_sshd
+'
+CERT_TREE="$TMP_DIR/ssh-cert"
+prepare_ssh_tree "$CERT_TREE" 00-hardening.conf 01-crypto-openssh99.conf 10-user-ca.conf
+docker run --rm -v "$CERT_TREE:/etc/ssh-under-test" "$DEBIAN13_IMAGE" \
+  sh -c "$CERT_SCRIPT" || fail "the SSH certificate end-to-end checks failed"
+
 echo
 echo "All Linux baseline checks passed."
