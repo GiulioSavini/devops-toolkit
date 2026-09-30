@@ -304,8 +304,17 @@ normally while quietly running fewer processing steps than the file appears
 to configure. `tests/observability.sh` asserts this gap the way it actually
 behaves (exit 0), specifically so a future Collector version that starts
 catching it breaks the test — forcing this paragraph to be corrected instead
-of being wrong forever. There is no substitute today for reading
-`service.pipelines` by eye against the components defined above it.
+of being wrong forever.
+
+The gap is left open by the Collector, not by this repository.
+`tests/observability.sh` also reads every component defined under
+`receivers`, `processors`, `exporters` and `extensions` and asserts that each
+one is referenced from `service.pipelines` — or, for an extension, from
+`service.extensions` — and fails naming any that is not. Its control is the
+same fixture `otelcol validate` accepts with exit 0: the scan must reject
+`resource/unused`, or it closes nothing. Run the same check against your own
+config before shipping it; an unwired `attributes/redact` redacts nothing
+while the file reads as though it does.
 
 ## Cardinality: the failure mode that kills Prometheus
 
