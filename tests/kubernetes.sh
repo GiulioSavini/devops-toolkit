@@ -23,10 +23,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 K8S_DIR="$ROOT_DIR/baselines/kubernetes"
 
-KUBECONFORM_IMAGE="ghcr.io/yannh/kubeconform@sha256:6b90a5f23d846140ce0194fe050b1995e546eba938f3a6bf10c039dd5e24588f"
-YQ_IMAGE="mikefarah/yq@sha256:cfc4eee658595834ef304eadb0c3ea721f3b7cb6404ad8b7cb909cc5b5145b23"
-PYTHON_IMAGE="python@sha256:7c61056e61ac89e852de05f3dc6fa51a6dd2181797bceed46aa725dd7cb2cd3b"
-KIND_NODE_IMAGE="kindest/node@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5"
+KUBECONFORM_IMAGE="ghcr.io/yannh/kubeconform@sha256:6b90a5f23d846140ce0194fe050b1995e546eba938f3a6bf10c039dd5e24588f" # ghcr.io/yannh/kubeconform:v0.8.0-alpine
+YQ_IMAGE="mikefarah/yq@sha256:cfc4eee658595834ef304eadb0c3ea721f3b7cb6404ad8b7cb909cc5b5145b23" # mikefarah/yq:4.53.6
+PYTHON_IMAGE="python@sha256:7c61056e61ac89e852de05f3dc6fa51a6dd2181797bceed46aa725dd7cb2cd3b" # python:3.13.15-slim-trixie
+KIND_NODE_IMAGE="kindest/node@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5" # kindest/node:v1.37.0
 K8S_VERSION="1.37.0"
 
 yq() { docker run --rm -v "$K8S_DIR:/w:ro" "$YQ_IMAGE" e "$@"; }
