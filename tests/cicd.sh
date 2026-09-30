@@ -8,8 +8,13 @@
 #   2. The GitLab CI equivalent validates against GitLab's own CI JSON
 #      schema and correctly activates its conditional jobs.
 #   3. The shared pre-commit config is schema-valid.
-#   4. Each of the above checks is proven capable of failing: every checker
-#      is run once against a deliberately broken copy first.
+#   4. Every action pin, in the baselines and in this repository's own
+#      workflow, is a commit SHA with a tag comment Dependabot can maintain.
+#   5. Every container image the test suites pull is a sha256 digest that
+#      states the version it came from, and no two suites claim the same tool
+#      version at different digests.
+#   6. Each of the above checks is proven capable of failing: every checker
+#      is run once against a deliberately broken input first.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -17,7 +22,7 @@ cd "$REPO_ROOT"
 
 ACTIONLINT_IMG="rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667"
 NODE_IMG="node:22-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c"
-PYTHON_IMG="python:3.12-slim@sha256:f77ac9e44ae96ef2c90b8053ea08c31f8be030f824196b0ae4db6d462c84e51f"
+PYTHON_IMG="python:3.12.14-slim-trixie@sha256:f77ac9e44ae96ef2c90b8053ea08c31f8be030f824196b0ae4db6d462c84e51f"
 GITLAB_CI_LOCAL_VERSION="4.75.1"
 PRE_COMMIT_VERSION="4.6.2"
 ALPINE_IMG="alpine:3.22@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8"
@@ -148,7 +153,7 @@ check_pin_format() {
   echo "$bad"
 }
 
-for f in baselines/cicd/security.yml baselines/cicd/security-caller-example.yml baselines/terraform/ci/plan.yml; do
+for f in baselines/cicd/security.yml baselines/cicd/security-caller-example.yml baselines/terraform/ci/plan.yml .github/workflows/docs.yml; do
   BAD="$(check_pin_format "$f")"
   [[ "$BAD" == "0" ]] || fail "$f has $BAD action pin(s) that are not a SHA with a trailing tag comment"
 done
@@ -161,6 +166,131 @@ printf 'jobs:\n  j:\n    steps:\n      - uses: actions/checkout@v4\n' > "$BAD_PI
 printf 'jobs:\n  j:\n    steps:\n      # actions/checkout@v7.0.1\n      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1\n' > "$BAD_PIN"
 [[ "$(check_pin_format "$BAD_PIN")" != "0" ]] || fail "the pin check accepted a tag comment on the line above, which Dependabot cannot maintain"
 pass "a bare tag and an above-the-line tag comment are both rejected"
+
+### 5. every container image a test suite pulls is a documented digest pin ---
+# A test that pins an image by tag proves nothing durable: the tag moves, and
+# the run that passes today runs a different binary tomorrow. Every suite
+# therefore pins by digest — and states, on the same line, which version that
+# digest was. Without the version the digest is unreadable, nobody dares bump
+# it, and two suites silently end up on different versions of the same tool:
+# that is exactly how tests/network.sh came to run shellcheck v0.10.0 while
+# four other suites ran v0.11.0, for months, with every check green.
+#
+# Two rules are enforced here:
+#   a. the pin carries a sha256 digest AND a version, either inline
+#      (repo:tag@sha256:...) or in a trailing comment;
+#   b. no two pins claim the SAME version of the same repository with
+#      DIFFERENT digests — that is a contradiction, and one of them is a lie.
+# Deliberate divergence stays legal: linux.sh pins debian:12-slim and
+# debian:13-slim on purpose, and the version in the comment is what makes that
+# visible as a choice instead of an accident.
+echo "### 5. test-suite image pins"
+
+# Emits one record per image assignment:
+#   OK <repo> <version> <digest> <file>:<line>
+#   BAD <file>:<line> <reason>
+scan_image_pins() {
+  python3 - "$@" <<'PY'
+import re, sys
+
+# NAME_IMAGE= / NAME_IMG= at the start of a line, double-quoted value, optional
+# trailing comment. An assignment this does not match is reported, never
+# skipped: a silent skip is how a check stops checking.
+ASSIGN = re.compile(r'^([A-Za-z0-9_]*(?:IMAGE|IMG)[A-Za-z0-9_]*)=(.*)$')
+QUOTED = re.compile(r'^"([^"]*)"[ \t]*(?:#[ \t]*(.*))?$')
+DIGEST = re.compile(r'@sha256:[0-9a-f]{64}$')
+
+for path in sys.argv[1:]:
+    with open(path) as fh:
+        for n, raw in enumerate(fh, 1):
+            line = raw.rstrip("\n")
+            m = ASSIGN.match(line)
+            if not m:
+                continue
+            var, rest = m.group(1), m.group(2)
+            q = QUOTED.match(rest)
+            if not q:
+                print(f"BAD {path}:{n} {var} is not a plain double-quoted image reference")
+                continue
+            ref, comment = q.group(1), (q.group(2) or "").strip()
+            # Images the suite builds itself are not pulled and have no upstream
+            # digest to pin; they are named in the repository's own namespace.
+            if ref.startswith("devops-toolkit/"):
+                continue
+            if not DIGEST.search(ref):
+                print(f"BAD {path}:{n} {var} is not pinned to a sha256 digest: {ref}")
+                continue
+            name, digest = ref.split("@", 1)
+            # A registry may carry a port (host:5000/repo), so only a colon in
+            # the LAST path segment is a tag.
+            tag = ""
+            if ":" in name.split("/")[-1]:
+                name, tag = name.rsplit(":", 1)
+            version = tag or comment
+            if not version:
+                print(f"BAD {path}:{n} {var} pins a digest with no version: "
+                      f"put the tag inline (repo:tag@sha256:...) or in a trailing comment")
+                continue
+            print(f"OK {name} {version} {digest} {path}:{n}")
+PY
+}
+
+# Fails when two pins claim the same version of one repository with different
+# digests. Reads scan_image_pins records on stdin.
+check_pin_agreement() {
+  awk '
+    $1 == "OK" {
+      # $2 repo, $3 version (may contain spaces in a comment), last-but-one is
+      # the digest, last is file:line — index from the end.
+      digest = $(NF - 1); where = $NF
+      version = ""
+      for (i = 3; i <= NF - 2; i++) version = version (version ? " " : "") $i
+      key = $2 " @ " version
+      if (key in seen && seen[key] != digest) {
+        printf "    %s is pinned to two different digests:\n      %s %s\n      %s %s\n", \
+          key, seen[key], at[key], digest, where
+        bad++
+      }
+      seen[key] = digest; at[key] = where
+    }
+    END { print bad + 0 }
+  '
+}
+
+PIN_RECORDS="$WORKDIR/image-pins.txt"
+scan_image_pins tests/*.sh tests/lib/*.sh > "$PIN_RECORDS"
+if grep -q '^BAD ' "$PIN_RECORDS"; then
+  grep '^BAD ' "$PIN_RECORDS" >&2
+  fail "$(grep -c '^BAD ' "$PIN_RECORDS") image pin(s) in tests/ are not a digest with a stated version"
+fi
+pass "every image a test suite pulls is a sha256 digest with the version it came from"
+
+AGREE="$(check_pin_agreement < "$PIN_RECORDS" | tail -1)"
+[[ "$AGREE" == "0" ]] || fail "$AGREE image repository/version pair(s) in tests/ disagree on the digest"
+pass "no two suites claim the same tool version at different digests"
+
+echo "### 5b. control: the pin scan must reject a tag, a bare digest and a disagreement"
+PIN_FIXTURE="$WORKDIR/pin-fixture.sh"
+printf 'FOO_IMAGE="alpine:3.22"\n' > "$PIN_FIXTURE"
+scan_image_pins "$PIN_FIXTURE" | grep -q '^BAD ' \
+  || fail "the pin scan accepted an image pinned by tag alone"
+
+printf 'FOO_IMAGE="alpine@sha256:%s"\n' "$(printf '0%.0s' {1..64})" > "$PIN_FIXTURE"
+scan_image_pins "$PIN_FIXTURE" | grep -q '^BAD ' \
+  || fail "the pin scan accepted a digest with no version stated"
+
+printf 'FOO_IMAGE="alpine@sha256:%s" # alpine:3.22\n' "$(printf '0%.0s' {1..64})"  > "$PIN_FIXTURE"
+printf 'BAR_IMAGE="alpine@sha256:%s" # alpine:3.22\n' "$(printf '1%.0s' {1..64})" >> "$PIN_FIXTURE"
+[[ "$(scan_image_pins "$PIN_FIXTURE" | check_pin_agreement | tail -1)" != "0" ]] \
+  || fail "the agreement check accepted alpine:3.22 pinned to two different digests"
+
+# ...and must accept the deliberate case, or it would forbid linux.sh testing
+# two Debian releases.
+printf 'A_IMAGE="debian@sha256:%s" # debian:12-slim\n' "$(printf '0%.0s' {1..64})"  > "$PIN_FIXTURE"
+printf 'B_IMAGE="debian@sha256:%s" # debian:13-slim\n' "$(printf '1%.0s' {1..64})" >> "$PIN_FIXTURE"
+[[ "$(scan_image_pins "$PIN_FIXTURE" | check_pin_agreement | tail -1)" == "0" ]] \
+  || fail "the agreement check rejected two different Debian releases, which is a legitimate pin"
+pass "a bare tag, an undocumented digest and a same-version digest conflict are all rejected"
 
 echo
 echo "All CI/CD baseline checks passed."

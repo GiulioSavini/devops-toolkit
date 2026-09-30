@@ -19,14 +19,12 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DOCKER_DIR="$ROOT_DIR/baselines/docker"
 
-# hadolint/hadolint:v2.15.1
-HADOLINT_IMAGE="hadolint/hadolint@sha256:32dac94127fd60b7b7e3fbfc65e1383b9b5e25c9bfd7b8536de7a539fe68a12d"
-# docker:29.8.1-dind — the dind variant, because it is the one that ships dockerd
-# itself (the plain -cli variant does not, and `--entrypoint dockerd` would fail
-# with "executable file not found").
-DIND_IMAGE="docker@sha256:3f3c01aaaebf7cce837356b688b7c059a4749f10bd7660dec7c58fc454a283f0"
-# ghcr.io/jqlang/jq:1.8.1
-JQ_IMAGE="ghcr.io/jqlang/jq@sha256:4f34c6d23f4b1372ac789752cc955dc67c2ae177eb1b5860b75cdc5091ce6f91"
+HADOLINT_IMAGE="hadolint/hadolint@sha256:32dac94127fd60b7b7e3fbfc65e1383b9b5e25c9bfd7b8536de7a539fe68a12d" # hadolint/hadolint:v2.15.1
+# The dind variant, because it is the one that ships dockerd itself (the plain
+# -cli variant does not, and `--entrypoint dockerd` would fail with "executable
+# file not found").
+DIND_IMAGE="docker@sha256:3f3c01aaaebf7cce837356b688b7c059a4749f10bd7660dec7c58fc454a283f0" # docker:29.8.1-dind
+JQ_IMAGE="ghcr.io/jqlang/jq@sha256:4f34c6d23f4b1372ac789752cc955dc67c2ae177eb1b5860b75cdc5091ce6f91" # ghcr.io/jqlang/jq:1.8.1
 
 IMAGE_TAG="devops-toolkit/example-app:test-$$"
 CONTAINER_NAME="docker-baseline-test-$$"

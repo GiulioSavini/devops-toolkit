@@ -72,8 +72,8 @@ NET_DIR="$ROOT_DIR/baselines/network"
 # Pinned by digest. Tags shown are what was resolved at the time of pinning:
 #   debian:13-slim               (resolved 2026-09-29)
 #   koalaman/shellcheck:v0.10.0  (resolved 2026-09-29)
-DEBIAN_IMAGE="debian@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a"
-SHELLCHECK_IMAGE="koalaman/shellcheck@sha256:2097951f02e735b613f4a34de20c40f937a6c8f18ecb170612c88c34517221fb"
+DEBIAN_IMAGE="debian@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a" # debian:13-slim
+SHELLCHECK_IMAGE="koalaman/shellcheck@sha256:61862eba1fcf09a484ebcc6feea46f1782532571a34ed51fedf90dd25f925a8d" # koalaman/shellcheck:v0.11.0
 
 TMP_DIR="$(mktemp -d)"
 cleanup() {

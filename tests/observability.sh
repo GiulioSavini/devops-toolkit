@@ -61,7 +61,7 @@ PROMETHEUS_IMG="prom/prometheus@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38b
 ALERTMANAGER_IMG="prom/alertmanager@sha256:27c475db5fb156cab31d5c18a4251ac7ed567746a2483ff264516437a39b15ba"                    # v0.28.1 (ships amtool, and is the server itself)
 OTELCOL_IMG="otel/opentelemetry-collector-contrib@sha256:d0ebf65280da2e1b1491d1b93648281afd353d4b9ea19160090303cec9a233bd"       # 0.116.1
 CURL_IMG="curlimages/curl@sha256:c1fe1679c34d9784c1b0d1e5f62ac0a79fca01fb6377cdd33e90473c6f9f9a69"                              # 8.11.1
-JQ_IMG="ghcr.io/jqlang/jq@sha256:096b83865ad59b5b02841f103f83f45c51318394331bf1995e187ea3be937432"                              # 1.7.1
+JQ_IMG="ghcr.io/jqlang/jq@sha256:4f34c6d23f4b1372ac789752cc955dc67c2ae177eb1b5860b75cdc5091ce6f91" # ghcr.io/jqlang/jq:1.8.1
 ALPINE_IMG="alpine@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8"                                     # 3.22
 
 WORK="$(mktemp -d)"

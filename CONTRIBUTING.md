@@ -32,6 +32,15 @@ The only host requirements are `bash`, `docker` and `curl`. Every tool runs in a
 pinned container image, so a local run resolves the same versions CI does. If a
 test needs a tool you do not have installed, that is a bug in the test.
 
+Pin an image by `sha256` digest and state the version on the same line, either
+inline (`repo:tag@sha256:...`) or in a trailing comment. `tests/cicd.sh` checks
+both. The version is not decoration: a digest nobody can read is a digest nobody
+dares bump, and two suites then drift onto different versions of the same tool
+without a single check turning red — which is how `tests/network.sh` ran
+shellcheck v0.10.0 while four other suites ran v0.11.0. Pinning two versions of
+the same image on purpose stays legal; the stated version is what makes it read
+as a choice.
+
 ## The guide structure
 
 Every guide follows the same order. A reader in the middle of an incident needs
