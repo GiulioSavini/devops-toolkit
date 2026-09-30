@@ -36,6 +36,11 @@
 #      behaves (exit 0), not the way a tidier test would prefer, and the
 #      same gap is written up in guides/observability-logging.md rather than
 #      silently dropped.
+#   5. The gap from 4, closed for the checked-in config: every component
+#      defined under receivers/processors/exporters/extensions must be
+#      referenced from service.pipelines, or from service.extensions for an
+#      extension. Its control is the very fixture otelcol validate accepts
+#      with exit 0, so the check cannot be passing by reading nothing.
 #
 # What this does NOT do:
 #   - It does not run the OpenTelemetry Collector, only validates its config.
@@ -62,6 +67,7 @@ ALERTMANAGER_IMG="prom/alertmanager@sha256:27c475db5fb156cab31d5c18a4251ac7ed567
 OTELCOL_IMG="otel/opentelemetry-collector-contrib@sha256:d0ebf65280da2e1b1491d1b93648281afd353d4b9ea19160090303cec9a233bd"       # 0.116.1
 CURL_IMG="curlimages/curl@sha256:c1fe1679c34d9784c1b0d1e5f62ac0a79fca01fb6377cdd33e90473c6f9f9a69"                              # 8.11.1
 JQ_IMG="ghcr.io/jqlang/jq@sha256:4f34c6d23f4b1372ac789752cc955dc67c2ae177eb1b5860b75cdc5091ce6f91" # ghcr.io/jqlang/jq:1.8.1
+YQ_IMG="mikefarah/yq@sha256:cfc4eee658595834ef304eadb0c3ea721f3b7cb6404ad8b7cb909cc5b5145b23" # mikefarah/yq:4.53.6
 ALPINE_IMG="alpine@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8"                                     # 3.22
 
 WORK="$(mktemp -d)"
@@ -339,6 +345,64 @@ if otelcol_validate "config-dead.yaml" >"$WORK/otel-dead.log" 2>&1; then
 else
   fail "otelcol validate REJECTED a component missing from service.pipelines — this contradicts the documented gap; update this test and guides/observability-logging.md to match the new behaviour:\n$(cat "$WORK/otel-dead.log")"
 fi
+
+step "the gap, closed: no component may be defined and then left out of every pipeline"
+# otelcol validate accepts the fixture above, so this is the check that closes
+# that gap for the checked-in config. An unwired component is not a harmless
+# leftover: attributes/redact is what strips the fields that must not reach the
+# backend, and a config where it is defined but referenced by no pipeline
+# redacts nothing while reading, to anyone auditing the file, exactly as if it
+# did. The same holds for memory_limiter, which stops the collector from being
+# OOM-killed under a log burst.
+#
+# yq converts YAML to JSON and nothing more; every decision is a jq expression,
+# because jq's semantics here were verified against the same jq the JQ_IMG pin
+# names. Extensions count as referenced when they appear under
+# service.extensions, which is where they belong — they are not pipeline
+# members.
+otel_as_json() {
+  docker run --rm -v "$WORK:/w:ro" "$YQ_IMG" e -o=json '.' "/w/$1"
+}
+OTEL_DEFINED='[(.receivers // {} | keys), (.processors // {} | keys), (.exporters // {} | keys), (.extensions // {} | keys)] | flatten | .[]'
+OTEL_REFERENCED='[(.service.pipelines // {} | .[] | (.receivers // [], .processors // [], .exporters // [])), (.service.extensions // [])] | flatten | .[]'
+
+# Prints one orphan component name per line; empty output means none.
+otel_orphans() {
+  local as_json="$WORK/otel-as-json.json"
+  otel_as_json "$1" > "$as_json"
+  comm -23 \
+    <(jq -r "$OTEL_DEFINED" < "$as_json" | sort -u) \
+    <(jq -r "$OTEL_REFERENCED" < "$as_json" | sort -u)
+}
+
+ORPHANS="$(otel_orphans "obs/otel-collector/config.yaml")"
+[[ -z "$ORPHANS" ]] || fail "these components are defined in otel-collector/config.yaml and referenced by no pipeline, so they do nothing:\n$ORPHANS"
+# An empty diff also results from reading nothing at all, so assert the scan
+# actually saw the config: the two components whose silence would matter most.
+otel_as_json "obs/otel-collector/config.yaml" > "$WORK/otel-defined.json"
+DEFINED_LIST="$(jq -r "$OTEL_DEFINED" < "$WORK/otel-defined.json" | sort -u)"
+for required in attributes/redact memory_limiter; do
+  grep -qxF "$required" <<<"$DEFINED_LIST" \
+    || fail "the component scan did not find '$required' in otel-collector/config.yaml — either the baseline dropped it or the scan is reading nothing"
+done
+pass "every receiver, processor, exporter and extension is wired into a pipeline or into service.extensions"
+
+step "control: the orphan scan must flag the very config otelcol validate accepted"
+ORPHANS_DEAD="$(otel_orphans "config-dead.yaml")"
+grep -qxF "resource/unused" <<<"$ORPHANS_DEAD" \
+  || fail "the orphan scan did not flag 'resource/unused' in the fixture otelcol validate accepted with exit 0, so it closes nothing:\n$ORPHANS_DEAD"
+pass "the orphan scan rejects 'resource/unused' — the gap otelcol leaves open is covered here"
+
+step "control: the orphan scan must not flag an extension that only service.extensions references"
+# health_check is referenced from service.extensions and from no pipeline. If
+# the scan treated pipeline membership as the only reference, it would flag
+# every extension and the check above would be passing by accident.
+grep -qxF "health_check" <<<"$DEFINED_LIST" \
+  || fail "health_check is no longer defined in the baseline — update this control"
+if grep -qxF "health_check" <<<"$ORPHANS"; then
+  fail "the orphan scan flagged health_check, which service.extensions references — extensions are not pipeline members"
+fi
+pass "an extension referenced only from service.extensions is not reported as an orphan"
 
 echo
 echo "All observability baseline checks passed."
