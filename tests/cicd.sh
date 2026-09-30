@@ -196,8 +196,10 @@ import re, sys
 # NAME_IMAGE= / NAME_IMG= at the start of a line, double-quoted value, optional
 # trailing comment. An assignment this does not match is reported, never
 # skipped: a silent skip is how a check stops checking.
-ASSIGN = re.compile(r'^([A-Za-z0-9_]*(?:IMAGE|IMG)[A-Za-z0-9_]*)=(.*)$')
-QUOTED = re.compile(r'^"([^"]*)"[ \t]*(?:#[ \t]*(.*))?$')
+# Shell (NAME="ref") and make (NAME := ref) both appear, so both are accepted;
+# the value may be double-quoted or bare, with an optional trailing comment.
+ASSIGN = re.compile(r'^([A-Za-z0-9_]*(?:IMAGE|IMG)[A-Za-z0-9_]*)[ \t]*[:?]?=[ \t]*(.*)$')
+VALUE = re.compile(r'^(?:"([^"]*)"|([^"#\s]+))[ \t]*(?:#[ \t]*(.*))?$')
 DIGEST = re.compile(r'@sha256:[0-9a-f]{64}$')
 
 for path in sys.argv[1:]:
@@ -208,11 +210,12 @@ for path in sys.argv[1:]:
             if not m:
                 continue
             var, rest = m.group(1), m.group(2)
-            q = QUOTED.match(rest)
+            q = VALUE.match(rest)
             if not q:
-                print(f"BAD {path}:{n} {var} is not a plain double-quoted image reference")
+                print(f"BAD {path}:{n} {var} is not a plain image reference")
                 continue
-            ref, comment = q.group(1), (q.group(2) or "").strip()
+            ref = q.group(1) if q.group(1) is not None else q.group(2)
+            comment = (q.group(3) or "").strip()
             # Images the suite builds itself are not pulled and have no upstream
             # digest to pin; they are named in the repository's own namespace.
             if ref.startswith("devops-toolkit/"):
@@ -258,7 +261,9 @@ check_pin_agreement() {
 }
 
 PIN_RECORDS="$WORKDIR/image-pins.txt"
-scan_image_pins tests/*.sh tests/lib/*.sh > "$PIN_RECORDS"
+# The Makefile is in scope too: `make lint` is the command CI runs, so the
+# image it names is as much a pin as any in tests/.
+scan_image_pins tests/*.sh tests/lib/*.sh Makefile > "$PIN_RECORDS"
 if grep -q '^BAD ' "$PIN_RECORDS"; then
   grep '^BAD ' "$PIN_RECORDS" >&2
   fail "$(grep -c '^BAD ' "$PIN_RECORDS") image pin(s) in tests/ are not a digest with a stated version"
@@ -278,6 +283,10 @@ scan_image_pins "$PIN_FIXTURE" | grep -q '^BAD ' \
 printf 'FOO_IMAGE="alpine@sha256:%s"\n' "$(printf '0%.0s' {1..64})" > "$PIN_FIXTURE"
 scan_image_pins "$PIN_FIXTURE" | grep -q '^BAD ' \
   || fail "the pin scan accepted a digest with no version stated"
+
+printf 'FOO_IMAGE := alpine:3.22\n' > "$PIN_FIXTURE"
+scan_image_pins "$PIN_FIXTURE" | grep -q '^BAD ' \
+  || fail "the pin scan accepted a make-style assignment pinned by tag alone"
 
 printf 'FOO_IMAGE="alpine@sha256:%s" # alpine:3.22\n' "$(printf '0%.0s' {1..64})"  > "$PIN_FIXTURE"
 printf 'BAR_IMAGE="alpine@sha256:%s" # alpine:3.22\n' "$(printf '1%.0s' {1..64})" >> "$PIN_FIXTURE"

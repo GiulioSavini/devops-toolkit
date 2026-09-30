@@ -4,6 +4,10 @@
 SHELL := /bin/bash
 TESTS := $(filter-out tests/kubernetes-e2e.sh,$(sort $(wildcard tests/*.sh)))
 
+# Pinned by digest, with the tag it belonged to, exactly like the pins in
+# tests/: a tag is a mutable pointer, and tests/cicd.sh checks this line.
+MARKDOWNLINT_IMAGE := davidanson/markdownlint-cli2@sha256:d5f3f3f04b2e285dcbcdcd13b4454d119e273e3c393a9dabd163dba4abad526d # davidanson/markdownlint-cli2:v0.23.3
+
 .PHONY: help test e2e lint all
 
 help:
@@ -19,6 +23,6 @@ e2e:
 	bash tests/kubernetes-e2e.sh
 
 lint:
-	docker run --rm -v "$(CURDIR)":/w -w /w davidanson/markdownlint-cli2:v0.23.3 "**/*.md"
+	docker run --rm -v "$(CURDIR)":/w -w /w $(MARKDOWNLINT_IMAGE) "**/*.md"
 
 all: lint test e2e
