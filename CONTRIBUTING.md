@@ -50,7 +50,6 @@ exists, a `Last reviewed` value that is a `YYYY-MM` date, every relative link
 resolving, and every guide appearing in the README table. It needs only `bash`.
 Run it before opening a pull request that adds or renames a guide.
 
-
 Every guide follows the same order. A reader in the middle of an incident needs
 to find the verification command without reading the prose above it.
 
