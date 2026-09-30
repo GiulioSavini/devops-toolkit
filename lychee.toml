@@ -23,9 +23,14 @@ timeout = 30
 # the problem it was meant to solve: lychee's own default is the string those
 # sites are willing to serve.
 
-# 403 and 429 are accepted deliberately: both are "not from this IP, not right
-# now", not "this page is gone". 2xx and 3xx are the normal successes.
-accept = ["200..=299", "403", "429"]
+# 403, 418 and 429 are accepted deliberately: all three mean "not from this
+# client, not right now", never "this page is gone". A removed page answers 404
+# or 410, and those stay failures. 418 is on this list because
+# freedesktop.org serves it intermittently to lychee's default user agent —
+# with the browser-like one it served 418 to every systemd manual page, so
+# there is no user agent that avoids it, only a status code to stop treating as
+# a dead link. 2xx and 3xx are the normal successes.
+accept = ["200..=299", "403", "418", "429"]
 
 # Sites that block automated requests outright, so checking them only ever
 # produces noise. Each one is a paywalled or bot-walled standards body, and each
