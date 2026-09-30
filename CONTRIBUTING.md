@@ -146,6 +146,15 @@ In each case the check looked right and proved nothing.
   trust it.
 - New guide? Add it to the table in `README.md` in the same PR.
 
+`main` is protected. **Lint markdown**, **Validate baselines** and **Check
+links** are required checks, the branch must be up to date before a merge, and
+review conversations must be resolved. **Kubernetes end-to-end** is deliberately
+*not* required: it does not run on a pull request from a fork, and a required
+check that never reports leaves those pull requests permanently unmergeable. It
+still runs — and can still fail the build — on `main` and on branches in this
+repository, so read its result before merging a change under
+`baselines/kubernetes/`.
+
 ## Reporting something that is wrong
 
 Use the **incorrect guidance** issue template. The most useful report names the
