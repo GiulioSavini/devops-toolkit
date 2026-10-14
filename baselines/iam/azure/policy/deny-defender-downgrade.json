@@ -1,0 +1,40 @@
+{
+  "properties": {
+    "displayName": "Deny downgrading Microsoft Defender for Cloud pricing tiers",
+    "policyType": "Custom",
+    "mode": "All",
+    "description": "Protects Microsoft Defender for Cloud from being silently disabled by setting a plan's pricing tier to Free, the AWS-SCP equivalent of denying GuardDuty/Config tampering. A Free pricing tier is not itself a violation on a subscription where Defender was never enabled; this only blocks the WRITE that downgrades an existing Standard plan.",
+    "metadata": {
+      "category": "Security Center",
+      "version": "1.0.0"
+    },
+    "parameters": {
+      "effect": {
+        "type": "String",
+        "defaultValue": "Deny",
+        "allowedValues": ["Audit", "Deny", "Disabled"],
+        "metadata": {
+          "displayName": "Effect",
+          "description": "Start with Audit, move to Deny once the compliance report is clean."
+        }
+      }
+    },
+    "policyRule": {
+      "if": {
+        "allOf": [
+          {
+            "field": "type",
+            "equals": "Microsoft.Security/pricings"
+          },
+          {
+            "field": "Microsoft.Security/pricings/pricingTier",
+            "equals": "Free"
+          }
+        ]
+      },
+      "then": {
+        "effect": "[parameters('effect')]"
+      }
+    }
+  }
+}

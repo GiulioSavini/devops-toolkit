@@ -1,0 +1,11 @@
+# gcloud org-policies set-policy iam.disableAuditLoggingExemption.yaml --update-mask=spec
+# Blocks granting any principal an exemption from Cloud Audit Logs (the
+# `roles/logging.privateLogViewer`-adjacent IAM condition exemptions audit
+# logs normally cannot be turned off for). Parity with the AWS
+# protect-security-services SCP's CloudTrail-tampering statement: audit
+# logging here cannot be disabled outright, so this closes the one remaining
+# way to go blind, which is exempting a principal from being logged.
+name: organizations/ORG_ID/policies/iam.disableAuditLoggingExemption
+spec:
+  rules:
+    - enforce: true
