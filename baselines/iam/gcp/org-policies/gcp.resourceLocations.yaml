@@ -1,0 +1,13 @@
+# gcloud org-policies set-policy gcp.resourceLocations.yaml --update-mask=spec
+# Region allowlist: location-based resources may only be created in the listed
+# regions/multi-regions. Parity with the AWS region-allowlist SCP; unlike the
+# AWS version this is a single value-group constraint, not a Deny statement
+# with a NotAction exemption list, because GCP has no equivalent "global
+# service" carve-out problem at the org-policy layer (IAM, Cloud Billing and
+# similar APIs are not location-based resources to begin with).
+name: organizations/ORG_ID/policies/gcp.resourceLocations
+spec:
+  rules:
+    - values:
+        allowedValues:
+          - in:eu-locations

@@ -1,0 +1,53 @@
+{
+  "properties": {
+    "displayName": "Deny resources outside the allowed locations",
+    "policyType": "Custom",
+    "mode": "Indexed",
+    "description": "Region allowlist, modelled on Azure's built-in 'Allowed locations' policy. Region-scoped resources deployed outside the list are denied; resource groups and subscriptions are exempt here because they are global containers, not region-scoped data, and a resource group pinned to a disallowed region would block deploying the exemption itself. Microsoft Entra ID resources are exempt because they are tenant-wide, not region-scoped.",
+    "metadata": {
+      "category": "General",
+      "version": "1.0.0"
+    },
+    "parameters": {
+      "effect": {
+        "type": "String",
+        "defaultValue": "Deny",
+        "allowedValues": ["Audit", "Deny", "Disabled"],
+        "metadata": {
+          "displayName": "Effect",
+          "description": "Start with Audit, move to Deny once the compliance report is clean."
+        }
+      },
+      "allowedLocations": {
+        "type": "Array",
+        "defaultValue": [],
+        "metadata": {
+          "displayName": "Allowed locations",
+          "description": "The list of locations resources may be deployed to, e.g. westeurope, northeurope.",
+          "strongType": "location"
+        }
+      }
+    },
+    "policyRule": {
+      "if": {
+        "allOf": [
+          {
+            "field": "location",
+            "notIn": "[parameters('allowedLocations')]"
+          },
+          {
+            "field": "location",
+            "notEquals": "global"
+          },
+          {
+            "field": "type",
+            "notEquals": "Microsoft.AzureActiveDirectory/b2cDirectories"
+          }
+        ]
+      },
+      "then": {
+        "effect": "[parameters('effect')]"
+      }
+    }
+  }
+}
