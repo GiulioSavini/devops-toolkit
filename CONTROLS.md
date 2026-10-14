@@ -16,24 +16,30 @@ Read it as a map, not as evidence. Two deliberate omissions:
 NIS2 references are to Article 21(2) unless stated; the incident-reporting
 obligations are Article 23.
 
+The SOC 2 column cites the 2017 Trust Services Criteria (as amended 2022) by
+their point-of-focus code (e.g. CC6.1). SOC 2 has no public control-ID registry
+to verify names against, unlike CIS or NIST — treat these codes the same way as
+the "no benchmark section numbers" note above: a starting point for your own
+auditor's mapping, not a citation.
+
 ## By domain
 
-| Domain | Guide | CIS | NIST SP 800-53 Rev. 5 | ISO/IEC 27001:2022 | NIS2 | Proven by |
-|---|---|---|---|---|---|---|
-| OS hardening | [linux-hardening](guides/linux-hardening.md) | CIS Distribution Independent Linux, Ubuntu, RHEL 9 | AC-17, AU-2, CM-6, CM-7, IA-5, SC-7, SI-2 | A.8.5, A.8.8, A.8.9, A.8.15, A.8.20 | (e), (h), (i) | `sshd -t` on OpenSSH 8.7/9.2/9.9, drop-in load order, `nft -c -f`, auditd netlink parse |
-| SSH access | [ssh-key-management](guides/ssh-key-management.md) | same | AC-2, IA-2, IA-5, SC-13 | A.5.15, A.5.17, A.8.5 | (i) | certificate issued, principals enforced, a revoked certificate actually refused |
-| Container images and runtime | [docker-security](guides/docker-security.md) | CIS Docker Benchmark | AC-6, CM-2, CM-6, CM-7, SC-2, SC-5 | A.8.2, A.8.9, A.8.19, A.8.30 | (d), (e), (i) | image built and run, then asked from inside for uid, rootfs, `CapBnd`, `NoNewPrivs` |
-| Orchestration | [kubernetes-hardening](guides/kubernetes-hardening.md) | CIS Kubernetes Benchmark | AC-3, AC-6, AU-2, SC-7, SC-28 | A.8.2, A.8.15, A.8.20, A.8.24 | (b), (e), (h), (i) | kind cluster: PSA rejection, containerd's own view of the pod, NetworkPolicy timeouts, etcd read raw |
-| Secrets | [secrets-management](guides/secrets-management.md) | — | IA-5, SC-12, SC-28, AC-3 | A.5.17, A.5.33, A.8.24 | (h), (i) | SOPS round trip, a live Vault denying a sibling path, gitleaks on a dirty and a clean fixture |
-| Pipelines | [cicd-security](guides/cicd-security.md) | CIS Supply Chain, OWASP CICD-SEC | AC-2, AC-6, CM-2, SA-10, SI-7, SR-4 | A.5.21, A.8.28, A.8.30 | (d), (e), (i) | actionlint with shellcheck, GitLab's CI schema, a broken permissions block rejected |
-| Infrastructure as code | [terraform-security](guides/terraform-security.md) | CIS cloud benchmarks | CM-2, CM-3, CP-9, SA-10, SC-12, SC-28 | A.5.33, A.8.9, A.8.13, A.8.24 | (c), (d), (h) | `validate`, an enforced lock file, rego with its own unit tests, `tofu` vs `terraform` on encryption |
-| Configuration management | [ansible-best-practices](guides/ansible-best-practices.md) | CIS Linux Benchmarks | AC-6, CM-2, CM-3, CM-6, IA-5 | A.8.2, A.8.9, A.8.32 | (d), (e), (i) | pinned collections installed, ansible-lint production profile, the sudo/wheel branch executed |
-| Network segmentation | [network-zero-trust](guides/network-zero-trust.md) | CIS Controls v8 §12, §13 | AC-4, AC-17, SC-7, SC-8 | A.8.20, A.8.21, A.8.22 | (e), (h) | ruleset loaded in a netns and read back, WireGuard config on a real interface |
-| Monitoring and alerting | [observability-logging](guides/observability-logging.md) | CIS Controls v8 §8 | AU-2, AU-4, AU-6, AU-11, SI-4 | A.8.15, A.8.16 | (b) | every SLO alert fired with `promtool test rules`, inhibition proven on a live Alertmanager |
-| Host intrusion detection | [wazuh-hids](guides/wazuh-hids.md) | CIS Controls v8 §3, §8 | AU-3, AU-12, CM-3, SI-3, SI-4, SI-7 | A.8.7, A.8.9, A.8.15, A.8.16 | (b), (e) | every custom rule fired through the real `wazuh-logtest`, and not fired on the benign line |
-| Continuity | [backup-disaster-recovery](guides/backup-disaster-recovery.md) | CIS Controls v8 §11 | CP-2, CP-4, CP-6, CP-9, CP-10, SI-7 | A.5.29, A.5.30, A.8.13, A.8.14 | (c) | real backup, prune, restore and byte comparison; corrupted pack detected; point-in-time restore |
-| Cloud identity | [cloud-iam](guides/cloud-iam.md) | CIS AWS/Azure/GCP Foundations | AC-2, AC-3, AC-6, AU-9, IA-2, IA-5 | A.5.15, A.5.16, A.5.18, A.8.2 | (i) | AWS policy grammar, `terraform test` on the OIDC trust policies, SCP size and global-service exemptions |
-| Incident handling | [incident-response](guides/incident-response.md) | NIST SP 800-61, ISO/IEC 27037 | AU-9, IR-2, IR-4, IR-6, IR-7, IR-8 | A.5.24, A.5.26, A.5.27, A.5.28 | Art. 23 | collector run on a live host, manifest proven to detect tampering, timeout survived |
+| Domain | Guide | CIS | NIST SP 800-53 Rev. 5 | ISO/IEC 27001:2022 | SOC 2 (2017 TSC) | NIS2 | Proven by |
+|---|---|---|---|---|---|---|---|
+| OS hardening | [linux-hardening](guides/linux-hardening.md) | CIS Distribution Independent Linux, Ubuntu, RHEL 9 | AC-17, AU-2, CM-6, CM-7, IA-5, SC-7, SI-2 | A.8.5, A.8.8, A.8.9, A.8.15, A.8.20 | CC6.1, CC6.6, CC6.8 | (e), (h), (i) | `sshd -t` on OpenSSH 8.7/9.2/9.9, drop-in load order, `nft -c -f`, auditd netlink parse |
+| SSH access | [ssh-key-management](guides/ssh-key-management.md) | same | AC-2, IA-2, IA-5, SC-13 | A.5.15, A.5.17, A.8.5 | CC6.1, CC6.3 | (i) | certificate issued, principals enforced, a revoked certificate actually refused |
+| Container images and runtime | [docker-security](guides/docker-security.md) | CIS Docker Benchmark | AC-6, CM-2, CM-6, CM-7, SC-2, SC-5 | A.8.2, A.8.9, A.8.19, A.8.30 | CC6.6, CC6.8, CC8.1 | (d), (e), (i) | image built and run, then asked from inside for uid, rootfs, `CapBnd`, `NoNewPrivs` |
+| Orchestration | [kubernetes-hardening](guides/kubernetes-hardening.md) | CIS Kubernetes Benchmark | AC-3, AC-6, AU-2, SC-7, SC-28 | A.8.2, A.8.15, A.8.20, A.8.24 | CC6.1, CC6.6, CC6.8 | (b), (e), (h), (i) | kind cluster: PSA rejection, containerd's own view of the pod, NetworkPolicy timeouts, etcd read raw |
+| Secrets | [secrets-management](guides/secrets-management.md) | — | IA-5, SC-12, SC-28, AC-3 | A.5.17, A.5.33, A.8.24 | CC6.1, CC6.3, CC6.7 | (h), (i) | SOPS round trip, a live Vault denying a sibling path, gitleaks on a dirty and a clean fixture |
+| Pipelines | [cicd-security](guides/cicd-security.md) | CIS Supply Chain, OWASP CICD-SEC | AC-2, AC-6, CM-2, SA-10, SI-7, SR-4 | A.5.21, A.8.28, A.8.30 | CC7.1, CC8.1 | (d), (e), (i) | actionlint with shellcheck, GitLab's CI schema, a broken permissions block rejected |
+| Infrastructure as code | [terraform-security](guides/terraform-security.md) | CIS cloud benchmarks | CM-2, CM-3, CP-9, SA-10, SC-12, SC-28 | A.5.33, A.8.9, A.8.13, A.8.24 | CC6.8, CC8.1 | (c), (d), (h) | `validate`, an enforced lock file, rego with its own unit tests, `tofu` vs `terraform` on encryption |
+| Configuration management | [ansible-best-practices](guides/ansible-best-practices.md) | CIS Linux Benchmarks | AC-6, CM-2, CM-3, CM-6, IA-5 | A.8.2, A.8.9, A.8.32 | CC6.8, CC8.1 | (d), (e), (i) | pinned collections installed, ansible-lint production profile, the sudo/wheel branch executed |
+| Network segmentation | [network-zero-trust](guides/network-zero-trust.md) | CIS Controls v8 §12, §13 | AC-4, AC-17, SC-7, SC-8 | A.8.20, A.8.21, A.8.22 | CC6.1, CC6.6 | (e), (h) | ruleset loaded in a netns and read back, WireGuard config on a real interface |
+| Monitoring and alerting | [observability-logging](guides/observability-logging.md) | CIS Controls v8 §8 | AU-2, AU-4, AU-6, AU-11, SI-4 | A.8.15, A.8.16 | CC7.2, CC7.3 | (b) | every SLO alert fired with `promtool test rules`, inhibition proven on a live Alertmanager |
+| Host intrusion detection | [wazuh-hids](guides/wazuh-hids.md) | CIS Controls v8 §3, §8 | AU-3, AU-12, CM-3, SI-3, SI-4, SI-7 | A.8.7, A.8.9, A.8.15, A.8.16 | CC7.2 | (b), (e) | every custom rule fired through the real `wazuh-logtest`, and not fired on the benign line |
+| Continuity | [backup-disaster-recovery](guides/backup-disaster-recovery.md) | CIS Controls v8 §11 | CP-2, CP-4, CP-6, CP-9, CP-10, SI-7 | A.5.29, A.5.30, A.8.13, A.8.14 | A1.2, A1.3 | (c) | real backup, prune, restore and byte comparison; corrupted pack detected; point-in-time restore |
+| Cloud identity | [cloud-iam](guides/cloud-iam.md) | CIS AWS/Azure/GCP Foundations | AC-2, AC-3, AC-6, AU-9, IA-2, IA-5 | A.5.15, A.5.16, A.5.18, A.8.2 | CC6.1, CC6.2, CC6.3 | (i) | AWS policy grammar, `terraform test` on the OIDC trust policies, SCP size and global-service exemptions |
+| Incident handling | [incident-response](guides/incident-response.md) | NIST SP 800-61, ISO/IEC 27037 | AU-9, IR-2, IR-4, IR-6, IR-7, IR-8 | A.5.24, A.5.26, A.5.27, A.5.28 | CC7.3, CC7.4, CC7.5 | Art. 23 | collector run on a live host, manifest proven to detect tampering, timeout survived |
 
 ## By NIS2 Article 21(2)
 
