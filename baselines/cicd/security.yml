@@ -114,7 +114,7 @@ jobs:
             semgrep ci --config=auto --sarif --sarif-output=semgrep.sarif
       - name: Upload SARIF to code scanning
         if: always()
-        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           sarif_file: semgrep.sarif
           category: semgrep
@@ -146,7 +146,7 @@ jobs:
             --severity "$FAIL_ON_SEVERITY" --exit-code 1 .
       - name: Upload SARIF to code scanning
         if: always()
-        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           sarif_file: trivy.sarif
           category: trivy
@@ -194,7 +194,7 @@ jobs:
       packages: write # push signature + attestation next to the image
     steps:
       - name: Install cosign
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
         with:
           cosign-release: "v3.1.3"
       - name: Download SBOM
